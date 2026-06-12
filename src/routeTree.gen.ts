@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WatchlistRouteImport } from './routes/watchlist'
 import { Route as ScannerRouteImport } from './routes/scanner'
 import { Route as PitchRouteImport } from './routes/pitch'
+import { Route as NewsRouteImport } from './routes/news'
+import { Route as FundsRouteImport } from './routes/funds'
 import { Route as DematRouteImport } from './routes/demat'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as BacktesterRouteImport } from './routes/backtester'
@@ -30,6 +32,16 @@ const ScannerRoute = ScannerRouteImport.update({
 const PitchRoute = PitchRouteImport.update({
   id: '/pitch',
   path: '/pitch',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewsRoute = NewsRouteImport.update({
+  id: '/news',
+  path: '/news',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FundsRoute = FundsRouteImport.update({
+  id: '/funds',
+  path: '/funds',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DematRoute = DematRouteImport.update({
@@ -58,6 +70,8 @@ export interface FileRoutesByFullPath {
   '/backtester': typeof BacktesterRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
+  '/funds': typeof FundsRoute
+  '/news': typeof NewsRoute
   '/pitch': typeof PitchRoute
   '/scanner': typeof ScannerRoute
   '/watchlist': typeof WatchlistRoute
@@ -67,6 +81,8 @@ export interface FileRoutesByTo {
   '/backtester': typeof BacktesterRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
+  '/funds': typeof FundsRoute
+  '/news': typeof NewsRoute
   '/pitch': typeof PitchRoute
   '/scanner': typeof ScannerRoute
   '/watchlist': typeof WatchlistRoute
@@ -77,6 +93,8 @@ export interface FileRoutesById {
   '/backtester': typeof BacktesterRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
+  '/funds': typeof FundsRoute
+  '/news': typeof NewsRoute
   '/pitch': typeof PitchRoute
   '/scanner': typeof ScannerRoute
   '/watchlist': typeof WatchlistRoute
@@ -88,6 +106,8 @@ export interface FileRouteTypes {
     | '/backtester'
     | '/dashboard'
     | '/demat'
+    | '/funds'
+    | '/news'
     | '/pitch'
     | '/scanner'
     | '/watchlist'
@@ -97,6 +117,8 @@ export interface FileRouteTypes {
     | '/backtester'
     | '/dashboard'
     | '/demat'
+    | '/funds'
+    | '/news'
     | '/pitch'
     | '/scanner'
     | '/watchlist'
@@ -106,6 +128,8 @@ export interface FileRouteTypes {
     | '/backtester'
     | '/dashboard'
     | '/demat'
+    | '/funds'
+    | '/news'
     | '/pitch'
     | '/scanner'
     | '/watchlist'
@@ -116,6 +140,8 @@ export interface RootRouteChildren {
   BacktesterRoute: typeof BacktesterRoute
   DashboardRoute: typeof DashboardRoute
   DematRoute: typeof DematRoute
+  FundsRoute: typeof FundsRoute
+  NewsRoute: typeof NewsRoute
   PitchRoute: typeof PitchRoute
   ScannerRoute: typeof ScannerRoute
   WatchlistRoute: typeof WatchlistRoute
@@ -142,6 +168,20 @@ declare module '@tanstack/react-router' {
       path: '/pitch'
       fullPath: '/pitch'
       preLoaderRoute: typeof PitchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/news': {
+      id: '/news'
+      path: '/news'
+      fullPath: '/news'
+      preLoaderRoute: typeof NewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/funds': {
+      id: '/funds'
+      path: '/funds'
+      fullPath: '/funds'
+      preLoaderRoute: typeof FundsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demat': {
@@ -180,6 +220,8 @@ const rootRouteChildren: RootRouteChildren = {
   BacktesterRoute: BacktesterRoute,
   DashboardRoute: DashboardRoute,
   DematRoute: DematRoute,
+  FundsRoute: FundsRoute,
+  NewsRoute: NewsRoute,
   PitchRoute: PitchRoute,
   ScannerRoute: ScannerRoute,
   WatchlistRoute: WatchlistRoute,
@@ -187,13 +229,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

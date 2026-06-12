@@ -3,6 +3,8 @@ import { Link, useRouterState } from "@tanstack/react-router";
 const TABS = [
   { to: "/dashboard", label: "Dashboard" },
   { to: "/scanner", label: "Market Scanner" },
+  { to: "/funds", label: "Mutual Funds" },
+  { to: "/news", label: "Market News" },
   { to: "/watchlist", label: "Watchlist" },
   { to: "/backtester", label: "Backtester" },
   { to: "/demat", label: "Demat" },
