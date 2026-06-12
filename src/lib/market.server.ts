@@ -1,6 +1,5 @@
 // Server-only helpers for Angel One SmartAPI. Not safe to import from client code.
-import otplib from "otplib";
-const { authenticator } = otplib;
+import { authenticator } from "otplib/preset-default";
 
 const ANGEL_BASE = "https://apiconnect.angelbroking.com";
 
