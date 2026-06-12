@@ -36,7 +36,7 @@ async function login(): Promise<AngelSession> {
   if (!clientcode || !password || !totpSecret || !apiKey) {
     throw new Error("Angel credentials missing (ANGEL_CLIENT_CODE / ANGEL_PASSWORD / ANGEL_TOTP_SECRET / ANGEL_API_KEY)");
   }
-  const totp = authenticator.generate(totpSecret);
+  const totp = generateSync({ secret: totpSecret });
   const res = await fetch(`${ANGEL_BASE}/rest/auth/angelbroking/user/v1/loginByPassword`, {
     method: "POST",
     headers: commonHeaders(),
