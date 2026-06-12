@@ -11,24 +11,24 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { NeuralCanvas } from "@/components/NeuralCanvas";
+import { StatusBar } from "@/components/StatusBar";
+import { TickerBar } from "@/components/TickerBar";
+import { TabNav } from "@/components/TabNav";
+import { useDexterState } from "@/hooks/useDexterState";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="flex min-h-screen items-center justify-center px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <h1 className="text-7xl font-bold dx-grad-text">404</h1>
+        <h2 className="mt-4 text-xl font-semibold">Signal lost</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+          The route you're looking for isn't on the tape.
         </p>
-        <div className="mt-6">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Go home
-          </Link>
-        </div>
+        <Link to="/dashboard" className="dx-pill dx-pill-ok inline-block mt-6">
+          Back to dashboard
+        </Link>
       </div>
     </div>
   );
@@ -40,33 +40,22 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
-
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
-        </h1>
+    <div className="flex min-h-screen items-center justify-center px-4">
+      <div className="max-w-md text-center dx-glass p-8">
+        <h1 className="text-xl font-semibold">Engine fault</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong on our end. You can try refreshing or head back home.
+          A subsystem crashed. The circuit breaker is holding your positions.
         </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <button
-            onClick={() => {
-              router.invalidate();
-              reset();
-            }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Try again
-          </button>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            Go home
-          </a>
-        </div>
+        <button
+          onClick={() => {
+            router.invalidate();
+            reset();
+          }}
+          className="dx-pill mt-6 cursor-pointer"
+        >
+          Retry
+        </button>
       </div>
     </div>
   );
@@ -77,21 +66,21 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "DEXTER — Bio-Algorithmic Trading Engine" },
+      {
+        name: "description",
+        content:
+          "Cognitive firewall between human impulse and capital markets. Biometric-aware live trading intelligence with Angel One and Finnhub feeds.",
+      },
+      { property: "og:title", content: "DEXTER — Bio-Algorithmic Trading Engine" },
+      {
+        property: "og:description",
+        content: "Biometric-aware live market intelligence for Indian equities.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
+    links: [{ rel: "stylesheet", href: appCss }],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -105,7 +94,7 @@ function RootShell({ children }: { children: ReactNode }) {
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body data-mode="full" data-arousal="low">
         {children}
         <Scripts />
       </body>
@@ -113,13 +102,29 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function BodyAttrs() {
+  const { uiMode, arousalLevel } = useDexterState();
+  useEffect(() => {
+    document.body.dataset.mode = uiMode;
+    document.body.dataset.arousal = arousalLevel;
+  }, [uiMode, arousalLevel]);
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
-
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <BodyAttrs />
+      <NeuralCanvas />
+      <div className="relative z-10 min-h-screen flex flex-col">
+        <StatusBar />
+        <TickerBar />
+        <TabNav />
+        <main className="flex-1 p-4 md:p-6 max-w-[1600px] w-full mx-auto">
+          <Outlet />
+        </main>
+      </div>
     </QueryClientProvider>
   );
 }
