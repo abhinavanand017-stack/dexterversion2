@@ -1,81 +1,86 @@
-## Scope reality check
+## Dexter Dashboard — 12-Fix Overhaul
 
-You're asking for two large pieces of work:
+This is a large, multi-phase rebuild. I'll execute in the master sequence you specified, batching closely-related fixes into phases so each commit leaves the app in a working state.
 
-1. **Port DEXTER** — your uploads are a vanilla HTML/CSS/JS app: 1,356 lines of HTML, 2,716 lines of CSS, 3,687 lines of core JS, 545 lines of add-ons, plus a 668-line Python forecasting engine. Lovable's stack is React 19 + TanStack Start + Tailwind v4 (not vanilla HTML, not Python at runtime).
-2. **Live market data** — Angel One SmartAPI (server-side, login + 15s poll) with Finnhub WebSocket as a fallback.
+### Current state recap
+- Root `/` redirects to `/dashboard` (so the "blank root" is really the dashboard being sparse — I'll confirm and either kill the redirect or enrich the dashboard).
+- Live ticker uses Angel One server fn + Finnhub WS fallback. You're now asking for a **browser-side Yahoo Finance** feed as the primary — I'll add it and keep Angel as a secondary server-side source.
+- Tabs are a top nav. You want a **left sidebar** with a Pitch Tour.
+- No demo mode, no error-status component, no lambda context, no shadow-portfolio story, no score breakdown, no biometric source selector.
 
-Done properly, this is multi-phase. I won't try to cram it into one turn.
+### Phase A — P0 (Fixes 1, 7, 9)
+**A1. Root + badge (Fix 1)**
+- Remove `/` → `/dashboard` redirect; mount the dashboard directly at `/` (keep `/dashboard` as alias).
+- Hide Lovable badge via `publish_settings--set_badge_visibility` (requires Pro — I'll attempt and report back if it fails).
+- Add `v1.0 Beta` footer tag.
 
-## Proposed phases
+**A2. Error handling + DataStatus (Fix 7)**
+- New `src/lib/safeFetch.ts` with 5s timeout + fallback pattern.
+- New `src/components/DataStatus.tsx` in the bottom status bar with green/amber/grey states tracked via a `useDataHealth` zustand slice.
+- New `src/components/Skeleton.tsx` with shimmer keyframe (added to `styles.css`); 3s max then fallback.
+- Wrap funds + news + market fetches.
 
-### Phase 1 — Foundation & shell (this turn)
-- Bring the DEXTER **design system** into `src/styles.css` (palette, fonts, glow tokens, arousal/mode variants).
-- Port the **app shell**: neural canvas background, top status bar, tab navigation, ticker tape bar (the thing live data feeds into).
-- Stub `State` as a React context / Zustand store.
-- Land the dashboard panel with Dexter Score gauge + a couple of cards so the shell isn't empty.
-- Other panels (Backtester, Pitch Deck, Market Scanner, Watchlist, Demat Gateway) get route stubs — wired but empty — to be filled in later phases.
+**A3. Demo Mode (Fix 9)**
+- Extend `useDexterState` with `demoMode` (default `true`, persisted to localStorage), `demoEvent` log, and a 120s scripted sequence (arousal 0.28→0.58→0.82→0.35, circuit breaker auto-fire at T+45s, score pulse 71–76, lambda 3.2→7.8→3.2).
+- New `DemoBanner.tsx` (amber, above StatusBar) with toggle.
+- New `DemoPill.tsx` next to logo.
+- New `EventToast.tsx` for the "Nifty drops 1.8%" + "Elevated stress" notifications.
+- New `CircuitBreakerOverlay.tsx` (used by both demo + manual triggers).
 
-### Phase 2 — Live market data backend (this turn, alongside Phase 1)
-- Enable **Lovable Cloud** (needed to store secrets server-side).
-- Add secrets: `ANGEL_CLIENT_CODE`, `ANGEL_PASSWORD`, `ANGEL_TOTP_SECRET` (TOTP **secret**, not a one-shot code — server generates the 6-digit code on demand via `otplib`), `ANGEL_API_KEY`, plus `FINNHUB_KEY`.
-- Server function `getAngelQuotes` (`src/lib/market.functions.ts`):
-  - Logs in via `loginByPassword` with freshly-generated TOTP, caches `jwtToken` in memory until expiry.
-  - Calls `/market/v1/quote/` for NSE:NIFTY 50 (99926000) and BSE:SENSEX (99919000).
-  - Returns `{ symbol, ltp, change, percentChange, ts }[]`.
-  - On any error returns `{ ok: false, error }` so the client can fall back.
-- Client hook `useLiveTicker`:
-  - Polls `getAngelQuotes` every 15s.
-  - If Angel returns an error or stale data twice in a row, opens a Finnhub WebSocket (`wss://ws.finnhub.io?token=…`) — token fetched from a tiny server fn `getFinnhubToken` so we don't ship `FINNHUB_KEY` in `VITE_`.
-  - Falls back to seeded static prices if both fail.
-- Ticker bar component reads from the hook and renders `ltp`, `change`, `%change` with up/down color + flash animation.
+### Phase B — P1 (Fixes 2, 11, 8)
+**B1. Live market data (Fix 2)**
+- New `src/hooks/useMarketData.ts` polling Yahoo `^NSEI`, `^BSESN`, `^INDIAVIX` every 30s with `safeFetch` + IN number formatting + flash animation.
+- Wire into `TickerBar` (replacing/augmenting current Angel feed for the headline indices). Keep Angel server-fn alive but secondary.
+- "Last updated HH:MM:SS IST" line under ticker.
 
-### Phase 3+ (separate turns, ask before starting)
-- Backtester logic, Pitch Deck overlay, Market Scanner table, Watchlist CRUD, Circuit Breaker overlay + countdown.
-- Add-ons: Dexter Score v2 hero, Shadow Portfolio, Portfolio Optimizer.
-- Forecasting engine — Python won't run in the Cloudflare Worker runtime. Options: (a) rewrite the core models in TypeScript, (b) host the Python on Modal / Replicate / a separate FastAPI service and call it from a server fn. Decide later.
+**B2. Market hours (Fix 11)**
+- New `src/hooks/useMarketStatus.ts` with NSE hours + 2025–2026 holiday list.
+- Pause Yahoo polling when closed; show countdown to next open.
+- Surface status in `DataStatus`.
 
-## Things you need to know / decide
+**B3. Lambda slider wired everywhere (Fix 8)**
+- Add `lambda` to `useDexterState` already exists — add `setLambda`, label derivation, and demo-mode auto-animation.
+- New `src/components/LambdaSlider.tsx` with tooltip + dynamic label.
+- New `src/components/EfficientFrontier.tsx` (Recharts) with interpolated dot, metrics readout, allocation bars.
+- Wire to Dashboard.
 
-- **Angel TOTP**: the SmartAPI login needs a 6-digit TOTP. To generate it server-side every 15s I need the **base32 TOTP secret** from your Angel profile (Profile → Enable TOTP shows the QR + secret). A one-time `123456` code won't work for a recurring poller.
-- **Angel API key** is required in the `X-PrivateKey` header.
-- **Finnhub Indian index coverage** on the free tier is limited — `NSE:NIFTY50` / `BSE:SENSEX` may not stream. Treating it strictly as fallback is the right call.
-- **Browser CORS**: Angel's API blocks browser calls. All Angel traffic goes through our server function — never client-side.
-- **Forecasting engine** stays out of scope until you decide where Python runs.
+### Phase C — Sidebar nav (Fix 10)
+- Replace `TabNav` (top) with a collapsible left `AppSidebar` using shadcn Sidebar (64px ↔ 220px).
+- Routes: Overview (`/`), Portfolio Optimizer (`/optimizer`), Biometrics Lab (`/biometrics`), Market News (`/news`), Fund Screener (`/funds`), Shadow Portfolio (`/shadow`), Dexter Score (`/score`), Settings (`/settings`).
+- "Guided Pitch Tour" button → 5s/section auto-nav with progress bar + Exit Tour button.
+- Mobile (<768px): bottom tab bar with Overview/Portfolio/Biometrics/News/Score.
+- 200ms fade transition on route changes.
+- Keep existing `/scanner`, `/watchlist`, `/backtester`, `/demat`, `/pitch` reachable from Settings or remove from primary nav.
 
-## Technical details (Phase 1 + 2 deliverables)
+### Phase D — Story panels (Fixes 5, 6)
+**D1. Shadow Portfolio (Fix 5)** — new `/shadow` route with Recharts ComposedChart (algo solid blue / user dashed red / optional green "what-if"), override event markers + tooltips, 3-col summary bar, 1.5s draw animation.
 
-```
-src/
-  styles.css                                # DEXTER tokens + arousal/mode variants
-  routes/
-    __root.tsx                              # Update head() + neural canvas + status bar + ticker
-    index.tsx                               # Redirect to /dashboard
-    dashboard.tsx                           # Score hero + cards
-    backtester.tsx                          # Stub
-    pitch.tsx                               # Stub
-    scanner.tsx                             # Stub
-    watchlist.tsx                           # Stub
-    demat.tsx                               # Stub
-  components/
-    NeuralCanvas.tsx
-    StatusBar.tsx
-    TickerBar.tsx                           # ← consumes useLiveTicker
-    TabNav.tsx
-    ScoreHero.tsx
-  hooks/
-    useLiveTicker.ts                        # Angel poll + Finnhub WS fallback
-    useDexterState.ts                       # Zustand store mirroring window.State
-  lib/
-    market.functions.ts                     # getAngelQuotes, getFinnhubToken
-    market.server.ts                        # Angel session cache + TOTP generation (otplib)
-```
+**D2. Dexter Score breakdown (Fix 6)** — extend `ScoreHero` with expandable breakdown (3 progress bars: Risk-Adjusted 28/35, Override Discipline 24/35, Behavioral 22/30), percentile bar, color-coded ring tiers, weekly trend arrow.
 
-Dependencies to add: `zustand`, `otplib`.
+### Phase E — Mobile + Biometrics (Fixes 3, 4)
+**E1. Mobile responsiveness (Fix 3)** — sweep cards/grids/charts/overlay; bottom tab bar already from Phase C.
 
-## Ask
+**E2. Biometric source selector (Fix 4)** — new `BiometricSource.tsx` dropdown (Demo / Manual / Apple Health / Garmin / Whoop with "coming soon" toasts). Manual mode reveals 4 sliders (HRV, HR, Sleep, Stress) that drive arousal/lambda live. Provenance label under each reading.
 
-Reply with:
-1. **Confirm Phase 1 + 2 scope** (or trim — e.g. "skip the route stubs, just shell + ticker").
-2. **Angel TOTP secret availability** — do you have the base32 secret, or only short-lived codes? If only codes, we make TOTP a user input field instead of automating login.
-3. **Approval to enable Lovable Cloud** (required for server secrets).
+### Phase F — Branding + final polish (Fixes 12 + master)
+- Update root `head()` (title, description, OG, theme-color, og:image once generated).
+- Generate favicon "D" lettermark in `#378ADD` on dark (one image via imagegen → drop into `/public`).
+- Footer (left/center/right + "Powered by" strip).
+- Dynamic browser tab title per active section (`useDocumentTitle`).
+- Final polish pass: unified card class, animated gradient background, 0.4s number transitions, "Engine Active" pulse, fixed bottom status bar (36px), `formatINR` utility for lakh/crore.
+
+### Technical notes (for the technical-minded)
+- Yahoo Finance CORS sometimes blocks browser fetches. If it fails in production, I'll proxy via a thin TanStack server fn (`getYahooQuote`) — `safeFetch` falls back to demo data either way so the UI never breaks.
+- Recharts is already in shadcn-land; I'll add it via `bun add recharts` if not present.
+- All new client state (demoMode, lambda, biometric source, sidebar open) lives in the existing zustand `useDexterState` to avoid React context boilerplate.
+- Lovable badge hiding requires a Pro plan; if your workspace isn't on Pro, that single sub-item will be skipped with a note and I'll still add the `v1.0 Beta` footer.
+
+### What I will NOT do unprompted
+- Touch Supabase schemas or add auth.
+- Wire real wearable SDKs (Apple Health/Garmin/Whoop) — they remain "coming soon" toasts per your spec.
+- Rip out the existing `/scanner`, `/backtester`, etc. routes — they'll live under Settings or stay as-is.
+
+### Delivery order
+I'll ship Phase A → F sequentially in this thread. Each phase ends with a build verification before moving on. Roughly 6 message turns of implementation, batched heavily in parallel.
+
+Reply **approve** to start with Phase A, or tell me to skip/reorder anything.
