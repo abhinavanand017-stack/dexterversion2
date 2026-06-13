@@ -1,9 +1,16 @@
 import { useDexterState } from "@/hooks/useDexterState";
 
-function tone(s: number) {
-  if (s > 70) return "var(--bull)";
-  if (s >= 40) return "var(--amber)";
-  return "var(--bear)";
+function tierColor(s: number) {
+  if (s > 80) return "#fbbf24";
+  if (s >= 60) return "#3b82f6";
+  if (s >= 40) return "#f59e0b";
+  return "#ef4444";
+}
+function tierLabel(s: number) {
+  if (s > 80) return "Elite Discipline";
+  if (s >= 60) return "Strong Discipline";
+  if (s >= 40) return "Developing";
+  return "High Behavioral Risk";
 }
 
 export function ScoreHero() {
