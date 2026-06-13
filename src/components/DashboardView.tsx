@@ -1,4 +1,6 @@
 import { ScoreHero } from "@/components/ScoreHero";
+import { LambdaSlider } from "@/components/LambdaSlider";
+import { EfficientFrontier } from "@/components/EfficientFrontier";
 import { useDexterState } from "@/hooks/useDexterState";
 
 export function DashboardView() {
@@ -13,12 +15,18 @@ export function DashboardView() {
         <Card title="Collateral" value="₹3.20 L" sub="Pledged holdings" />
         <Card title="Lambda (λ)" value={lambda.toFixed(2)} sub={`Arousal · ${arousalLevel}`} />
       </div>
+      <div className="grid lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2">
+          <EfficientFrontier />
+        </div>
+        <LambdaSlider />
+      </div>
       <div className="dx-glass p-6">
         <h3 className="text-lg font-display mb-2">Live indices</h3>
         <p className="text-sm text-muted-foreground">
-          NIFTY 50, SENSEX, and India VIX stream from Yahoo Finance every 30 seconds with Angel One
-          as a secondary source. The cognitive firewall fires automatically when arousal crosses
-          critical thresholds — try the Demo Mode banner above to watch a full market stress event.
+          NIFTY 50, SENSEX, and India VIX stream from Yahoo Finance every 30 seconds. The cognitive
+          firewall fires automatically when arousal crosses critical thresholds — watch the Demo
+          banner above to see a full market stress event play out.
         </p>
       </div>
     </div>
