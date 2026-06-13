@@ -10,18 +10,38 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WatchlistRouteImport } from './routes/watchlist'
+import { Route as ShadowRouteImport } from './routes/shadow'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ScoreRouteImport } from './routes/score'
 import { Route as ScannerRouteImport } from './routes/scanner'
 import { Route as PitchRouteImport } from './routes/pitch'
+import { Route as OptimizerRouteImport } from './routes/optimizer'
 import { Route as NewsRouteImport } from './routes/news'
 import { Route as FundsRouteImport } from './routes/funds'
 import { Route as DematRouteImport } from './routes/demat'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as BiometricsRouteImport } from './routes/biometrics'
 import { Route as BacktesterRouteImport } from './routes/backtester'
 import { Route as IndexRouteImport } from './routes/index'
 
 const WatchlistRoute = WatchlistRouteImport.update({
   id: '/watchlist',
   path: '/watchlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShadowRoute = ShadowRouteImport.update({
+  id: '/shadow',
+  path: '/shadow',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScoreRoute = ScoreRouteImport.update({
+  id: '/score',
+  path: '/score',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScannerRoute = ScannerRouteImport.update({
@@ -32,6 +52,11 @@ const ScannerRoute = ScannerRouteImport.update({
 const PitchRoute = PitchRouteImport.update({
   id: '/pitch',
   path: '/pitch',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OptimizerRoute = OptimizerRouteImport.update({
+  id: '/optimizer',
+  path: '/optimizer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const NewsRoute = NewsRouteImport.update({
@@ -54,6 +79,11 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BiometricsRoute = BiometricsRouteImport.update({
+  id: '/biometrics',
+  path: '/biometrics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BacktesterRoute = BacktesterRouteImport.update({
   id: '/backtester',
   path: '/backtester',
@@ -68,35 +98,50 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/backtester': typeof BacktesterRoute
+  '/biometrics': typeof BiometricsRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
   '/funds': typeof FundsRoute
   '/news': typeof NewsRoute
+  '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
   '/scanner': typeof ScannerRoute
+  '/score': typeof ScoreRoute
+  '/settings': typeof SettingsRoute
+  '/shadow': typeof ShadowRoute
   '/watchlist': typeof WatchlistRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/backtester': typeof BacktesterRoute
+  '/biometrics': typeof BiometricsRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
   '/funds': typeof FundsRoute
   '/news': typeof NewsRoute
+  '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
   '/scanner': typeof ScannerRoute
+  '/score': typeof ScoreRoute
+  '/settings': typeof SettingsRoute
+  '/shadow': typeof ShadowRoute
   '/watchlist': typeof WatchlistRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/backtester': typeof BacktesterRoute
+  '/biometrics': typeof BiometricsRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
   '/funds': typeof FundsRoute
   '/news': typeof NewsRoute
+  '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
   '/scanner': typeof ScannerRoute
+  '/score': typeof ScoreRoute
+  '/settings': typeof SettingsRoute
+  '/shadow': typeof ShadowRoute
   '/watchlist': typeof WatchlistRoute
 }
 export interface FileRouteTypes {
@@ -104,46 +149,66 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/backtester'
+    | '/biometrics'
     | '/dashboard'
     | '/demat'
     | '/funds'
     | '/news'
+    | '/optimizer'
     | '/pitch'
     | '/scanner'
+    | '/score'
+    | '/settings'
+    | '/shadow'
     | '/watchlist'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/backtester'
+    | '/biometrics'
     | '/dashboard'
     | '/demat'
     | '/funds'
     | '/news'
+    | '/optimizer'
     | '/pitch'
     | '/scanner'
+    | '/score'
+    | '/settings'
+    | '/shadow'
     | '/watchlist'
   id:
     | '__root__'
     | '/'
     | '/backtester'
+    | '/biometrics'
     | '/dashboard'
     | '/demat'
     | '/funds'
     | '/news'
+    | '/optimizer'
     | '/pitch'
     | '/scanner'
+    | '/score'
+    | '/settings'
+    | '/shadow'
     | '/watchlist'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BacktesterRoute: typeof BacktesterRoute
+  BiometricsRoute: typeof BiometricsRoute
   DashboardRoute: typeof DashboardRoute
   DematRoute: typeof DematRoute
   FundsRoute: typeof FundsRoute
   NewsRoute: typeof NewsRoute
+  OptimizerRoute: typeof OptimizerRoute
   PitchRoute: typeof PitchRoute
   ScannerRoute: typeof ScannerRoute
+  ScoreRoute: typeof ScoreRoute
+  SettingsRoute: typeof SettingsRoute
+  ShadowRoute: typeof ShadowRoute
   WatchlistRoute: typeof WatchlistRoute
 }
 
@@ -154,6 +219,27 @@ declare module '@tanstack/react-router' {
       path: '/watchlist'
       fullPath: '/watchlist'
       preLoaderRoute: typeof WatchlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shadow': {
+      id: '/shadow'
+      path: '/shadow'
+      fullPath: '/shadow'
+      preLoaderRoute: typeof ShadowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/score': {
+      id: '/score'
+      path: '/score'
+      fullPath: '/score'
+      preLoaderRoute: typeof ScoreRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/scanner': {
@@ -168,6 +254,13 @@ declare module '@tanstack/react-router' {
       path: '/pitch'
       fullPath: '/pitch'
       preLoaderRoute: typeof PitchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/optimizer': {
+      id: '/optimizer'
+      path: '/optimizer'
+      fullPath: '/optimizer'
+      preLoaderRoute: typeof OptimizerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/news': {
@@ -198,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/biometrics': {
+      id: '/biometrics'
+      path: '/biometrics'
+      fullPath: '/biometrics'
+      preLoaderRoute: typeof BiometricsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/backtester': {
       id: '/backtester'
       path: '/backtester'
@@ -218,12 +318,17 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BacktesterRoute: BacktesterRoute,
+  BiometricsRoute: BiometricsRoute,
   DashboardRoute: DashboardRoute,
   DematRoute: DematRoute,
   FundsRoute: FundsRoute,
   NewsRoute: NewsRoute,
+  OptimizerRoute: OptimizerRoute,
   PitchRoute: PitchRoute,
   ScannerRoute: ScannerRoute,
+  ScoreRoute: ScoreRoute,
+  SettingsRoute: SettingsRoute,
+  ShadowRoute: ShadowRoute,
   WatchlistRoute: WatchlistRoute,
 }
 export const routeTree = rootRouteImport

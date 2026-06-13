@@ -8,14 +8,20 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NeuralCanvas } from "@/components/NeuralCanvas";
 import { StatusBar } from "@/components/StatusBar";
 import { TickerBar } from "@/components/TickerBar";
-import { TabNav } from "@/components/TabNav";
+import { AppSidebar, MobileTabBar, TourProgressBar } from "@/components/AppSidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { DemoBanner } from "@/components/DemoBanner";
+import { Footer } from "@/components/Footer";
+import { CircuitBreakerOverlay } from "@/components/CircuitBreakerOverlay";
 import { useDexterState } from "@/hooks/useDexterState";
+import { useDemoSequence } from "@/hooks/useDemoSequence";
 
 function NotFoundComponent() {
   return (
@@ -66,21 +72,29 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "DEXTER — Bio-Algorithmic Trading Engine" },
+      { title: "Dexter — Bio-Algorithmic Trading Engine" },
       {
         name: "description",
         content:
-          "Cognitive firewall between human impulse and capital markets. Biometric-aware live trading intelligence with Angel One and Finnhub feeds.",
+          "A cognitive firewall between human impulse and capital markets. Real-time biometric risk control for NSE/BSE traders.",
       },
-      { property: "og:title", content: "DEXTER — Bio-Algorithmic Trading Engine" },
+      { property: "og:title", content: "Dexter — The Cognitive Firewall for Indian Markets" },
       {
         property: "og:description",
-        content: "Biometric-aware live market intelligence for Indian equities.",
+        content:
+          "Bio-algorithmic trading that reads your biometrics and protects your portfolio from your own impulses.",
       },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
+      { property: "og:image", content: "/favicon.png" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: "/favicon.png" },
+      { name: "theme-color", content: "#0a0a1a" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/png", href: "/favicon.png" },
+      { rel: "apple-touch-icon", href: "/favicon.png" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -113,18 +127,34 @@ function BodyAttrs() {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useDemoSequence();
   return (
     <QueryClientProvider client={queryClient}>
       <BodyAttrs />
       <NeuralCanvas />
-      <div className="relative z-10 min-h-screen flex flex-col">
-        <StatusBar />
-        <TickerBar />
-        <TabNav />
-        <main className="flex-1 p-4 md:p-6 max-w-[1600px] w-full mx-auto">
-          <Outlet />
-        </main>
-      </div>
+      <TourProgressBar />
+      <SidebarProvider>
+        <div className="relative z-10 flex min-h-screen w-full">
+          <div className="hidden md:block">
+            <AppSidebar />
+          </div>
+          <div className="flex-1 flex flex-col min-w-0">
+            <DemoBanner />
+            <div className="flex items-center gap-2">
+              <SidebarTrigger className="ml-2 hidden md:inline-flex" />
+              <div className="flex-1 min-w-0"><StatusBar /></div>
+            </div>
+            <TickerBar />
+            <main className="flex-1 p-4 md:p-6 max-w-[1600px] w-full mx-auto">
+              <Outlet />
+            </main>
+          </div>
+        </div>
+      </SidebarProvider>
+      <MobileTabBar />
+      <Footer />
+      <CircuitBreakerOverlay />
+      <Toaster theme="dark" position="top-right" richColors />
     </QueryClientProvider>
   );
 }
