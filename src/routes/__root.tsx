@@ -8,6 +8,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
+import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -15,7 +16,11 @@ import { NeuralCanvas } from "@/components/NeuralCanvas";
 import { StatusBar } from "@/components/StatusBar";
 import { TickerBar } from "@/components/TickerBar";
 import { TabNav } from "@/components/TabNav";
+import { DemoBanner } from "@/components/DemoBanner";
+import { Footer } from "@/components/Footer";
+import { CircuitBreakerOverlay } from "@/components/CircuitBreakerOverlay";
 import { useDexterState } from "@/hooks/useDexterState";
+import { useDemoSequence } from "@/hooks/useDemoSequence";
 
 function NotFoundComponent() {
   return (
@@ -113,11 +118,13 @@ function BodyAttrs() {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useDemoSequence();
   return (
     <QueryClientProvider client={queryClient}>
       <BodyAttrs />
       <NeuralCanvas />
       <div className="relative z-10 min-h-screen flex flex-col">
+        <DemoBanner />
         <StatusBar />
         <TickerBar />
         <TabNav />
@@ -125,6 +132,9 @@ function RootComponent() {
           <Outlet />
         </main>
       </div>
+      <Footer />
+      <CircuitBreakerOverlay />
+      <Toaster theme="dark" position="top-right" richColors />
     </QueryClientProvider>
   );
 }
