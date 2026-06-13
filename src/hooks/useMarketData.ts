@@ -19,7 +19,10 @@ export interface MarketData {
 }
 
 export function useMarketData(pollMs = 30_000): MarketData {
-  const [data, setData] = useState<MarketData>({ ...SEED, lastUpdated: null, isLive: false });
+  const [data, setData] = useState<MarketData>({
+    nifty: SEED.nifty, sensex: SEED.sensex, vix: SEED.vix,
+    lastUpdated: null, isLive: false,
+  });
   const fetchYahoo = useServerFn(getYahooQuotes);
   const setHealth = useDexterState((s) => s.setDataHealth);
   const market = useMarketStatus();
