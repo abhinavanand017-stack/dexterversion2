@@ -72,21 +72,29 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "DEXTER — Bio-Algorithmic Trading Engine" },
+      { title: "Dexter — Bio-Algorithmic Trading Engine" },
       {
         name: "description",
         content:
-          "Cognitive firewall between human impulse and capital markets. Biometric-aware live trading intelligence with Angel One and Finnhub feeds.",
+          "A cognitive firewall between human impulse and capital markets. Real-time biometric risk control for NSE/BSE traders.",
       },
-      { property: "og:title", content: "DEXTER — Bio-Algorithmic Trading Engine" },
+      { property: "og:title", content: "Dexter — The Cognitive Firewall for Indian Markets" },
       {
         property: "og:description",
-        content: "Biometric-aware live market intelligence for Indian equities.",
+        content:
+          "Bio-algorithmic trading that reads your biometrics and protects your portfolio from your own impulses.",
       },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
+      { property: "og:image", content: "/favicon.png" },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: "/favicon.png" },
+      { name: "theme-color", content: "#0a0a1a" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/png", href: "/favicon.png" },
+      { rel: "apple-touch-icon", href: "/favicon.png" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
