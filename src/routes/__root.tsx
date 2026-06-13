@@ -15,7 +15,8 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NeuralCanvas } from "@/components/NeuralCanvas";
 import { StatusBar } from "@/components/StatusBar";
 import { TickerBar } from "@/components/TickerBar";
-import { TabNav } from "@/components/TabNav";
+import { AppSidebar, MobileTabBar, TourProgressBar } from "@/components/AppSidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { DemoBanner } from "@/components/DemoBanner";
 import { Footer } from "@/components/Footer";
 import { CircuitBreakerOverlay } from "@/components/CircuitBreakerOverlay";
@@ -123,15 +124,26 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <BodyAttrs />
       <NeuralCanvas />
-      <div className="relative z-10 min-h-screen flex flex-col">
-        <DemoBanner />
-        <StatusBar />
-        <TickerBar />
-        <TabNav />
-        <main className="flex-1 p-4 md:p-6 max-w-[1600px] w-full mx-auto">
-          <Outlet />
-        </main>
-      </div>
+      <TourProgressBar />
+      <SidebarProvider>
+        <div className="relative z-10 flex min-h-screen w-full">
+          <div className="hidden md:block">
+            <AppSidebar />
+          </div>
+          <div className="flex-1 flex flex-col min-w-0">
+            <DemoBanner />
+            <div className="flex items-center gap-2">
+              <SidebarTrigger className="ml-2 hidden md:inline-flex" />
+              <div className="flex-1 min-w-0"><StatusBar /></div>
+            </div>
+            <TickerBar />
+            <main className="flex-1 p-4 md:p-6 max-w-[1600px] w-full mx-auto">
+              <Outlet />
+            </main>
+          </div>
+        </div>
+      </SidebarProvider>
+      <MobileTabBar />
       <Footer />
       <CircuitBreakerOverlay />
       <Toaster theme="dark" position="top-right" richColors />
