@@ -78,7 +78,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "A cognitive firewall between human impulse and capital markets. Real-time biometric risk control for NSE/BSE traders.",
       },
-      { property: "og:title", content: "Dexter — The Cognitive Firewall for Indian Markets" },
+      { property: "og:title", content: "Dexter — Bio-Algorithmic Trading Engine" },
       {
         property: "og:description",
         content:
@@ -89,6 +89,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:image", content: "/favicon.png" },
       { name: "theme-color", content: "#0a0a1a" },
+      { name: "twitter:title", content: "Dexter — Bio-Algorithmic Trading Engine" },
+      { name: "description", content: "Live Market Ticker displays real-time stock market data for major indices." },
+      { property: "og:description", content: "Live Market Ticker displays real-time stock market data for major indices." },
+      { name: "twitter:description", content: "Live Market Ticker displays real-time stock market data for major indices." },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
