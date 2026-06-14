@@ -18,6 +18,7 @@ import { Route as PitchRouteImport } from './routes/pitch'
 import { Route as OptimizerRouteImport } from './routes/optimizer'
 import { Route as NewsRouteImport } from './routes/news'
 import { Route as FundsRouteImport } from './routes/funds'
+import { Route as ForecastRouteImport } from './routes/forecast'
 import { Route as DematRouteImport } from './routes/demat'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as BiometricsRouteImport } from './routes/biometrics'
@@ -69,6 +70,11 @@ const FundsRoute = FundsRouteImport.update({
   path: '/funds',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ForecastRoute = ForecastRouteImport.update({
+  id: '/forecast',
+  path: '/forecast',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DematRoute = DematRouteImport.update({
   id: '/demat',
   path: '/demat',
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/biometrics': typeof BiometricsRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
+  '/forecast': typeof ForecastRoute
   '/funds': typeof FundsRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/biometrics': typeof BiometricsRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
+  '/forecast': typeof ForecastRoute
   '/funds': typeof FundsRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
@@ -134,6 +142,7 @@ export interface FileRoutesById {
   '/biometrics': typeof BiometricsRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
+  '/forecast': typeof ForecastRoute
   '/funds': typeof FundsRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
@@ -152,6 +161,7 @@ export interface FileRouteTypes {
     | '/biometrics'
     | '/dashboard'
     | '/demat'
+    | '/forecast'
     | '/funds'
     | '/news'
     | '/optimizer'
@@ -168,6 +178,7 @@ export interface FileRouteTypes {
     | '/biometrics'
     | '/dashboard'
     | '/demat'
+    | '/forecast'
     | '/funds'
     | '/news'
     | '/optimizer'
@@ -184,6 +195,7 @@ export interface FileRouteTypes {
     | '/biometrics'
     | '/dashboard'
     | '/demat'
+    | '/forecast'
     | '/funds'
     | '/news'
     | '/optimizer'
@@ -201,6 +213,7 @@ export interface RootRouteChildren {
   BiometricsRoute: typeof BiometricsRoute
   DashboardRoute: typeof DashboardRoute
   DematRoute: typeof DematRoute
+  ForecastRoute: typeof ForecastRoute
   FundsRoute: typeof FundsRoute
   NewsRoute: typeof NewsRoute
   OptimizerRoute: typeof OptimizerRoute
@@ -277,6 +290,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FundsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/forecast': {
+      id: '/forecast'
+      path: '/forecast'
+      fullPath: '/forecast'
+      preLoaderRoute: typeof ForecastRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demat': {
       id: '/demat'
       path: '/demat'
@@ -321,6 +341,7 @@ const rootRouteChildren: RootRouteChildren = {
   BiometricsRoute: BiometricsRoute,
   DashboardRoute: DashboardRoute,
   DematRoute: DematRoute,
+  ForecastRoute: ForecastRoute,
   FundsRoute: FundsRoute,
   NewsRoute: NewsRoute,
   OptimizerRoute: OptimizerRoute,
