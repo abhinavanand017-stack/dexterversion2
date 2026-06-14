@@ -1,86 +1,62 @@
-## Dexter Dashboard — 12-Fix Overhaul
+# DEXTER v3 — Three Major Upgrades
 
-This is a large, multi-phase rebuild. I'll execute in the master sequence you specified, batching closely-related fixes into phases so each commit leaves the app in a working state.
+This is a large build. Before I start coding, here's exactly what I'll ship and what I'll trim, so you can confirm scope.
 
-### Current state recap
-- Root `/` redirects to `/dashboard` (so the "blank root" is really the dashboard being sparse — I'll confirm and either kill the redirect or enrich the dashboard).
-- Live ticker uses Angel One server fn + Finnhub WS fallback. You're now asking for a **browser-side Yahoo Finance** feed as the primary — I'll add it and keep Angel as a secondary server-side source.
-- Tabs are a top nav. You want a **left sidebar** with a Pitch Tour.
-- No demo mode, no error-status component, no lambda context, no shadow-portfolio story, no score breakdown, no biometric source selector.
+## Scope confirmation needed
 
-### Phase A — P0 (Fixes 1, 7, 9)
-**A1. Root + badge (Fix 1)**
-- Remove `/` → `/dashboard` redirect; mount the dashboard directly at `/` (keep `/dashboard` as alias).
-- Hide Lovable badge via `publish_settings--set_badge_visibility` (requires Pro — I'll attempt and report back if it fails).
-- Add `v1.0 Beta` footer tag.
+The spec is ~600 lines and the honest, no-BS picture is:
 
-**A2. Error handling + DataStatus (Fix 7)**
-- New `src/lib/safeFetch.ts` with 5s timeout + fallback pattern.
-- New `src/components/DataStatus.tsx` in the bottom status bar with green/amber/grey states tracked via a `useDataHealth` zustand slice.
-- New `src/components/Skeleton.tsx` with shimmer keyframe (added to `styles.css`); 3s max then fallback.
-- Wrap funds + news + market fetches.
+- **17 models in pure JS, client-side** — fully doable for the 9 statistical/ML ones (ARIMA, SARIMA, ETS, Linear, Ridge, RF-stump, GBM-stump, SVR-kernel, KNN, Prophet-decomp, Ensemble, Monte Carlo).
+- **LSTM/GRU/Transformer/CNN/WaveNet "trained" in browser** — I will implement the math and a forward pass, but in-browser gradient descent on randomly initialized weights against 2y of daily data will produce mostly noise. I'll do what the spec says (Xavier init + a few GD steps) and **label them clearly as "Lightweight JS approximation — illustrative, not trained"**. They will not be meaningfully predictive. If you want real DL forecasts we need a server.
+- **Yahoo Finance from the browser** — `query1.finance.yahoo.com` blocks CORS. I'll route through the existing `yahoo.functions.ts` server function (already in the repo) instead of `allorigins.win`, which is unreliable.
+- **Sequential model run with live progress** — yes, using `requestIdleCallback`/`setTimeout` between models so the UI stays responsive.
 
-**A3. Demo Mode (Fix 9)**
-- Extend `useDexterState` with `demoMode` (default `true`, persisted to localStorage), `demoEvent` log, and a 120s scripted sequence (arousal 0.28→0.58→0.82→0.35, circuit breaker auto-fire at T+45s, score pulse 71–76, lambda 3.2→7.8→3.2).
-- New `DemoBanner.tsx` (amber, above StatusBar) with toggle.
-- New `DemoPill.tsx` next to logo.
-- New `EventToast.tsx` for the "Nifty drops 1.8%" + "Elevated stress" notifications.
-- New `CircuitBreakerOverlay.tsx` (used by both demo + manual triggers).
+If any of the above is a dealbreaker, tell me now.
 
-### Phase B — P1 (Fixes 2, 11, 8)
-**B1. Live market data (Fix 2)**
-- New `src/hooks/useMarketData.ts` polling Yahoo `^NSEI`, `^BSESN`, `^INDIAVIX` every 30s with `safeFetch` + IN number formatting + flash animation.
-- Wire into `TickerBar` (replacing/augmenting current Angel feed for the headline indices). Keep Angel server-fn alive but secondary.
-- "Last updated HH:MM:SS IST" line under ticker.
+## What I'll build
 
-**B2. Market hours (Fix 11)**
-- New `src/hooks/useMarketStatus.ts` with NSE hours + 2025–2026 holiday list.
-- Pause Yahoo polling when closed; show countdown to next open.
-- Surface status in `DataStatus`.
+### 1. `/forecast` — 17-model Forecasting Engine
+- New route `src/routes/forecast.tsx` + add to `AppSidebar` and mobile bottom nav.
+- `src/lib/forecast/` module:
+  - `features.ts` — SMA/EMA/MACD/RSI/BB/ATR/returns + MinMax scaler
+  - `models/` — one file per model (17 files), each exporting `{ name, category, run(series, horizon) → { forecast[], rmse, signal, confidence, extra } }`
+  - `consensus.ts` — weighted score → STRONG BUY/BUY/HOLD/SELL/STRONG SELL
+  - `runner.ts` — sequential executor that yields after each model
+- UI: search bar, stock/MF toggle, horizon selector, hero consensus card, 17-model grid, tabbed charts (Recharts), nuances + risk flags, disclaimer.
+- Data source: stocks via existing `getYahooChart` server fn (extend to accept range/interval); MFs via `https://api.mfapi.in/mf/{code}` (CORS-OK).
 
-**B3. Lambda slider wired everywhere (Fix 8)**
-- Add `lambda` to `useDexterState` already exists — add `setLambda`, label derivation, and demo-mode auto-animation.
-- New `src/components/LambdaSlider.tsx` with tooltip + dynamic label.
-- New `src/components/EfficientFrontier.tsx` (Recharts) with interpolated dot, metrics readout, allocation bars.
-- Wire to Dashboard.
+### 2. `/funds` — Enhanced Mutual Fund Screener (rebuild)
+- Fetch full scheme list from `api.mfapi.in/mf` once, cache in memory + `localStorage` for 24h.
+- Compute CAGR 1Y/3Y/5Y, vol, max DD, Sharpe, Sortino, Calmar, star rating on demand (lazy per fund).
+- Left sidebar filters (category, returns, stars, risk, Sharpe, AUM, expense). AUM/expense/category come from a static `funds-meta.json` for top ~200 funds; rest fall back to "—".
+- Sortable results table, slide-in detail panel with NAV chart + lightweight Dexter signal (ETS + Ridge + KNN).
+- Compare tray (max 3), 3 highlight cards on top, Value Research / ET Money / Morningstar deep links.
 
-### Phase C — Sidebar nav (Fix 10)
-- Replace `TabNav` (top) with a collapsible left `AppSidebar` using shadcn Sidebar (64px ↔ 220px).
-- Routes: Overview (`/`), Portfolio Optimizer (`/optimizer`), Biometrics Lab (`/biometrics`), Market News (`/news`), Fund Screener (`/funds`), Shadow Portfolio (`/shadow`), Dexter Score (`/score`), Settings (`/settings`).
-- "Guided Pitch Tour" button → 5s/section auto-nav with progress bar + Exit Tour button.
-- Mobile (<768px): bottom tab bar with Overview/Portfolio/Biometrics/News/Score.
-- 200ms fade transition on route changes.
-- Keep existing `/scanner`, `/watchlist`, `/backtester`, `/demat`, `/pitch` reachable from Settings or remove from primary nav.
+### 3. `/news` — Live Market News (rebuild)
+- Try GNews → NewsData.io → placeholder fallback.
+- API key stored in `localStorage` (`dexter_news_api_key` + provider), entered in `/settings` "Data Connections" section with show/hide + test button.
+- Sentiment from keyword list, category tag from regex.
+- Marquee ticker, category tabs, search filter, 3-col grid, 5-min auto-refresh with countdown, MoneyControl attribution footer.
 
-### Phase D — Story panels (Fixes 5, 6)
-**D1. Shadow Portfolio (Fix 5)** — new `/shadow` route with Recharts ComposedChart (algo solid blue / user dashed red / optional green "what-if"), override event markers + tooltips, 3-col summary bar, 1.5s draw animation.
+### 4. `/settings` additions
+- "Data Connections" card: News provider dropdown + key input + test + Forecaster info accordion.
 
-**D2. Dexter Score breakdown (Fix 6)** — extend `ScoreHero` with expandable breakdown (3 progress bars: Risk-Adjusted 28/35, Override Discipline 24/35, Behavioral 22/30), percentile bar, color-coded ring tiers, weekly trend arrow.
+### 5. Design tokens
+- Extend `src/styles.css` with the BUY/HOLD/SELL/STRONG badges and `--accent-cyan/green/amber/red` mapped to the hex values in the spec, so all three pages share them.
 
-### Phase E — Mobile + Biometrics (Fixes 3, 4)
-**E1. Mobile responsiveness (Fix 3)** — sweep cards/grids/charts/overlay; bottom tab bar already from Phase C.
+## Non-goals / trims
+- No backtesting harness — RMSE is computed on a 20% holdout as specified, nothing more.
+- No persistent history of past forecasts.
+- Existing pages (Overview, Optimizer, Biometrics, Shadow, Score, ticker) are untouched.
 
-**E2. Biometric source selector (Fix 4)** — new `BiometricSource.tsx` dropdown (Demo / Manual / Apple Health / Garmin / Whoop with "coming soon" toasts). Manual mode reveals 4 sliders (HRV, HR, Sleep, Stress) that drive arousal/lambda live. Provenance label under each reading.
+## Technical notes
+- File layout follows TanStack file-based routing already in place.
+- Heavy math files are pure functions, no React — easy to unit-test later.
+- Each model file is <200 LOC; total new code ~4–5k LOC. Expect this to land across many parallel file writes.
 
-### Phase F — Branding + final polish (Fixes 12 + master)
-- Update root `head()` (title, description, OG, theme-color, og:image once generated).
-- Generate favicon "D" lettermark in `#378ADD` on dark (one image via imagegen → drop into `/public`).
-- Footer (left/center/right + "Powered by" strip).
-- Dynamic browser tab title per active section (`useDocumentTitle`).
-- Final polish pass: unified card class, animated gradient background, 0.4s number transitions, "Engine Active" pulse, fixed bottom status bar (36px), `formatINR` utility for lakh/crore.
+## Confirm before I build
+1. **OK with the DL models being labeled "illustrative approximation"?** (Real training needs a backend.)
+2. **OK to route Yahoo through the existing server function** instead of `allorigins.win`?
+3. **Static AUM/expense JSON for top ~200 funds is acceptable** (MFAPI doesn't expose AUM)?
 
-### Technical notes (for the technical-minded)
-- Yahoo Finance CORS sometimes blocks browser fetches. If it fails in production, I'll proxy via a thin TanStack server fn (`getYahooQuote`) — `safeFetch` falls back to demo data either way so the UI never breaks.
-- Recharts is already in shadcn-land; I'll add it via `bun add recharts` if not present.
-- All new client state (demoMode, lambda, biometric source, sidebar open) lives in the existing zustand `useDexterState` to avoid React context boilerplate.
-- Lovable badge hiding requires a Pro plan; if your workspace isn't on Pro, that single sub-item will be skipped with a note and I'll still add the `v1.0 Beta` footer.
-
-### What I will NOT do unprompted
-- Touch Supabase schemas or add auth.
-- Wire real wearable SDKs (Apple Health/Garmin/Whoop) — they remain "coming soon" toasts per your spec.
-- Rip out the existing `/scanner`, `/backtester`, etc. routes — they'll live under Settings or stay as-is.
-
-### Delivery order
-I'll ship Phase A → F sequentially in this thread. Each phase ends with a build verification before moving on. Roughly 6 message turns of implementation, batched heavily in parallel.
-
-Reply **approve** to start with Phase A, or tell me to skip/reorder anything.
+Reply "go" (or with adjustments) and I'll ship it.

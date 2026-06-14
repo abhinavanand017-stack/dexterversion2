@@ -1,0 +1,459 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, BarChart, Bar as RBar } from "recharts";
+import { buildFeatures } from "@/lib/forecast/features";
+import { runAll, type ModelResult } from "@/lib/forecast/models";
+import { computeConsensus, type Consensus } from "@/lib/forecast/consensus";
+import { loadStock, loadFundNav, loadMfList, type MfScheme } from "@/lib/forecast/data";
+import type { Bar as PriceBar } from "@/lib/forecast/features";
+
+export const Route = createFileRoute("/forecast")({
+  head: () => ({
+    meta: [
+      { title: "Dexter Forecaster — 17-Model Engine" },
+      { name: "description", content: "Algorithmic forecasting engine running 17 models locally on Indian stocks and mutual funds." },
+    ],
+  }),
+  component: ForecastPage,
+});
+
+type Mode = "stock" | "fund";
+
+const HORIZONS = [7, 15, 30, 60, 90];
+
+const SIGNAL_COLORS: Record<string, { bg: string; bd: string; tx: string; glow?: string }> = {
+  "STRONG BUY": { bg: "#00ff8840", bd: "#00ff88", tx: "#00ff88", glow: "0 0 14px #00ff8880" },
+  "BUY":        { bg: "#00ff8820", bd: "#00ff88", tx: "#00ff88" },
+  "HOLD":       { bg: "#ffaa0020", bd: "#ffaa00", tx: "#ffaa00" },
+  "SELL":       { bg: "#ff446620", bd: "#ff4466", tx: "#ff4466" },
+  "STRONG SELL":{ bg: "#ff446640", bd: "#ff4466", tx: "#ff4466", glow: "0 0 14px #ff446680" },
+};
+
+function SignalBadge({ label, large }: { label: string; large?: boolean }) {
+  const c = SIGNAL_COLORS[label] || SIGNAL_COLORS["HOLD"];
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded font-mono font-semibold tracking-wider ${large ? "px-4 py-2 text-base" : "px-2 py-0.5 text-[10px]"}`}
+      style={{ background: c.bg, border: `1px solid ${c.bd}`, color: c.tx, boxShadow: c.glow }}
+    >
+      {label.includes("BUY") ? <TrendingUp className="w-3.5 h-3.5" /> : label.includes("SELL") ? <TrendingDown className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
+      {label}
+    </span>
+  );
+}
+
+function fmtPrice(v: number, currency = "₹"): string {
+  if (!Number.isFinite(v)) return "—";
+  return `${currency}${v.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+}
+
+function ForecastPage() {
+  const [mode, setMode] = useState<Mode>("stock");
+  const [query, setQuery] = useState("RELIANCE");
+  const [horizon, setHorizon] = useState(30);
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number; current?: string }>({ done: 0, total: 17 });
+  const [bars, setBars] = useState<PriceBar[]>([]);
+  const [results, setResults] = useState<ModelResult[]>([]);
+  const [meta, setMeta] = useState<{ name: string; exchange: string; currency: string }>({ name: "", exchange: "NSE", currency: "₹" });
+  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"price" | "perf" | "mc" | "ind">("price");
+
+  // MF list (lazy)
+  const [mfList, setMfList] = useState<MfScheme[]>([]);
+  const [mfSearch, setMfSearch] = useState("");
+
+  const handleSearch = async () => {
+    setLoading(true);
+    setError(null);
+    setResults([]);
+    setProgress({ done: 0, total: 17 });
+    try {
+      let priceBars: PriceBar[];
+      if (mode === "stock") {
+        const r = await loadStock(query, "NS");
+        priceBars = r;
+        setMeta({ name: query.toUpperCase(), exchange: "NSE", currency: "₹" });
+      } else {
+        const code = Number(query);
+        if (!Number.isFinite(code)) throw new Error("Pick a fund from the dropdown");
+        const r = await loadFundNav(code);
+        priceBars = r.bars;
+        setMeta({ name: r.meta?.scheme_name || `Scheme ${code}`, exchange: r.meta?.fund_house || "MF", currency: "₹" });
+      }
+      setBars(priceBars);
+      const rows = buildFeatures(priceBars);
+      const collected: ModelResult[] = [];
+      await runAll(rows, horizon, (res, p) => {
+        collected.push(res);
+        setResults([...collected]);
+        setProgress(p);
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openMfPicker = async () => {
+    setMode("fund");
+    if (!mfList.length) {
+      try { setMfList(await loadMfList()); } catch { /* noop */ }
+    }
+  };
+
+  const filteredMf = useMemo(() => {
+    if (!mfSearch.trim()) return mfList.slice(0, 30);
+    const q = mfSearch.toLowerCase();
+    return mfList.filter((s) => s.schemeName.toLowerCase().includes(q)).slice(0, 30);
+  }, [mfList, mfSearch]);
+
+  const currentPrice = bars.length ? bars[bars.length - 1].c : 0;
+  const consensus: Consensus | null = results.length ? computeConsensus(results, currentPrice) : null;
+  const lastFeature = bars.length ? buildFeatures(bars).slice(-1)[0] : null;
+
+  const chartData = useMemo(() => {
+    if (!bars.length) return [];
+    const tailBars = bars.slice(-180);
+    const base = tailBars.map((b) => {
+      const row: Record<string, number | null> = { t: b.t, price: b.c };
+      results.forEach((r) => { row[r.id] = null; });
+      row.consensus = null;
+      return row;
+    });
+    if (results.length) {
+      const lastT = bars[bars.length - 1].t;
+      for (let h = 1; h <= horizon; h++) {
+        const row: Record<string, number | null> = { t: lastT + h * 86400000, price: null };
+        results.forEach((r) => { row[r.id] = r.forecast[h - 1] ?? null; });
+        if (consensus) {
+          const avg = results.reduce((s, r) => s + (r.forecast[h - 1] ?? currentPrice) * r.confidence, 0)
+            / results.reduce((s, r) => s + r.confidence, 1);
+          row.consensus = avg;
+        }
+        base.push(row);
+      }
+    }
+    return base;
+  }, [bars, results, horizon, consensus, currentPrice]);
+
+  const mc = results.find((r) => r.id === "mc");
+  const mcData = useMemo(() => {
+    if (!mc?.fanLow || !mc.fanHigh) return [];
+    return mc.forecast.map((p, i) => ({
+      day: i + 1,
+      median: p,
+      low: mc.fanLow![i],
+      high: mc.fanHigh![i],
+    }));
+  }, [mc]);
+
+  const perfData = useMemo(() => results.slice().sort((a, b) => a.rmse - b.rmse).map((r) => ({
+    name: r.name.split(" ")[0],
+    rmse: Number(r.rmse.toFixed(2)),
+  })), [results]);
+
+  const risks = useMemo(() => {
+    const list: string[] = [];
+    if (!lastFeature || !consensus) return list;
+    if (lastFeature.rsi14 > 75) list.push("Highly overbought (RSI > 75) — potential reversal risk");
+    if (lastFeature.c > lastFeature.bbUpper * 1.1) list.push("Extreme price extension above Bollinger band");
+    if (consensus.agreement < 0.5) list.push("High model disagreement — signal unreliable");
+    if (mc?.extra && typeof mc.extra.sigmaAnnual === "number" && mc.extra.sigmaAnnual > 40)
+      list.push(`High annualised volatility (${(mc.extra.sigmaAnnual as number).toFixed(0)}%) — wide forecast range`);
+    const best = results.slice().sort((a, b) => a.mape - b.mape)[0];
+    if (best && best.mape > 15) list.push(`Best-model MAPE ${best.mape.toFixed(1)}% — low historical accuracy`);
+    return list;
+  }, [lastFeature, consensus, mc, results]);
+
+  const nuances = useMemo(() => {
+    if (!lastFeature) return [];
+    const list: string[] = [];
+    const rsiTxt = lastFeature.rsi14 > 70 ? "Overbought" : lastFeature.rsi14 < 30 ? "Oversold" : "Neutral";
+    list.push(`RSI at ${lastFeature.rsi14.toFixed(1)} — ${rsiTxt}`);
+    list.push(`MACD ${lastFeature.macd > lastFeature.macdSignal ? "above" : "below"} signal line — ${lastFeature.macd > lastFeature.macdSignal ? "Bullish" : "Bearish"} momentum`);
+    const bbPct = ((lastFeature.c - lastFeature.bbLower) / Math.max(lastFeature.bbWidth, 1e-6)) * 100;
+    list.push(`Price at ${bbPct.toFixed(0)}% of Bollinger band range`);
+    list.push(`Trading ${lastFeature.c > lastFeature.sma50 ? "above" : "below"} 50-day SMA — ${lastFeature.c > lastFeature.sma50 ? "Uptrend" : "Downtrend"}`);
+    if (mc?.extra && typeof mc.extra.probPositive === "number") {
+      list.push(`Monte Carlo: ${((mc.extra.probPositive as number) * 100).toFixed(0)}% probability of positive return over ${horizon} days`);
+    }
+    return list;
+  }, [lastFeature, mc, horizon]);
+
+  return (
+    <div className="space-y-5 dx-fade-in">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Dexter Forecaster</h1>
+        <p className="text-sm text-muted-foreground">17 algorithmic models · runs locally in your browser</p>
+      </header>
+
+      {/* Search */}
+      <div className="dx-glass p-4 space-y-3">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setMode("stock")}
+            data-active={mode === "stock"}
+            className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+          >📈 Stock</button>
+          <button
+            onClick={openMfPicker}
+            data-active={mode === "fund"}
+            className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+          >💰 Mutual Fund</button>
+        </div>
+        <div className="flex flex-col md:flex-row gap-2">
+          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded border border-border bg-background/40">
+            <Search className="w-4 h-4 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
+              placeholder={mode === "stock" ? "NSE symbol (RELIANCE, TCS, INFY...)" : "Pick a fund below or paste scheme code"}
+              className="flex-1 bg-transparent outline-none text-sm font-mono"
+            />
+          </div>
+          <div className="flex gap-1">
+            {HORIZONS.map((h) => (
+              <button key={h} onClick={() => setHorizon(h)} data-active={horizon === h}
+                className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">
+                {h}d
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={handleSearch}
+            disabled={loading || !query}
+            className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            {loading ? "Computing..." : "Run 17 models"}
+          </button>
+        </div>
+        {mode === "fund" && mfList.length > 0 && (
+          <div className="rounded border border-border bg-background/30 max-h-56 overflow-auto">
+            <input
+              value={mfSearch} onChange={(e) => setMfSearch(e.target.value)}
+              placeholder="Filter funds by name..."
+              className="w-full px-3 py-2 bg-transparent border-b border-border outline-none text-sm"
+            />
+            <ul className="text-xs">
+              {filteredMf.map((s) => (
+                <li key={s.schemeCode}>
+                  <button onClick={() => setQuery(String(s.schemeCode))}
+                    className="w-full text-left px-3 py-1.5 hover:bg-card/60 font-mono truncate">
+                    {s.schemeCode} — {s.schemeName}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {loading && (
+          <div className="text-xs text-muted-foreground font-mono">
+            {progress.done}/{progress.total} · {progress.current || "preparing"}…
+            <div className="mt-1 h-1 bg-muted rounded">
+              <div className="h-full bg-primary rounded transition-all" style={{ width: `${(progress.done / progress.total) * 100}%` }} />
+            </div>
+          </div>
+        )}
+        {error && <div className="text-sm text-red-400 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> {error}</div>}
+      </div>
+
+      {/* Hero consensus */}
+      {consensus && (
+        <div className="dx-glass p-5 grid md:grid-cols-3 gap-4">
+          <div>
+            <div className="text-xs text-muted-foreground font-mono">{meta.exchange}</div>
+            <div className="text-2xl font-semibold truncate">{meta.name}</div>
+            <div className="text-3xl font-mono mt-2">{fmtPrice(currentPrice, meta.currency)}</div>
+            <div className="text-xs text-muted-foreground mt-1">Forecast horizon: {horizon} days</div>
+          </div>
+          <div className="flex flex-col items-center justify-center gap-3">
+            <SignalBadge label={consensus.label} large />
+            <div className="text-xs text-muted-foreground">
+              Confidence <span className="font-mono text-foreground">{consensus.confidence.toFixed(0)}%</span>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {results.filter((r) => (r.expectedReturn >= 0 ? "BUY" : "SELL") === (consensus.score >= 0 ? "BUY" : "SELL")).length}/{results.length} models agree
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="text-xs text-muted-foreground">Target range ({horizon}d)</div>
+            <div className="text-lg font-mono">
+              {fmtPrice(consensus.targetLow, meta.currency)} — {fmtPrice(consensus.targetHigh, meta.currency)}
+            </div>
+            <div className="text-xs text-muted-foreground">Weighted return {consensus.score.toFixed(2)}%</div>
+            <div className="grid grid-cols-9 gap-1 mt-2">
+              {results.map((r) => (
+                <div key={r.id} title={`${r.name}: ${r.signal}`} className="h-2 rounded-sm"
+                  style={{ background: r.signal === "BUY" ? "#00ff88" : r.signal === "SELL" ? "#ff4466" : "#ffaa00" }} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Model grid */}
+      {results.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {results.map((r) => (
+            <ModelCard key={r.id} r={r} currency={meta.currency} />
+          ))}
+        </div>
+      )}
+
+      {/* Charts */}
+      {results.length > 0 && (
+        <div className="dx-glass p-4">
+          <div className="flex gap-2 mb-3 flex-wrap">
+            {([["price","Price Forecast"],["perf","Model Performance"],["mc","Monte Carlo Fan"],["ind","Indicator Dashboard"]] as const).map(([k, label]) => (
+              <button key={k} onClick={() => setTab(k)} data-active={tab === k}
+                className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">
+                {label}
+              </button>
+            ))}
+          </div>
+          <div style={{ width: "100%", height: 360 }}>
+            {tab === "price" && (
+              <ResponsiveContainer>
+                <LineChart data={chartData}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="t" tickFormatter={(t) => new Date(t).toLocaleDateString("en-IN", { month: "short", day: "numeric" })} tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                  <YAxis domain={["auto","auto"]} tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                  <Tooltip contentStyle={{ background: "#0d1117", border: "1px solid rgba(0,212,255,0.3)" }} labelFormatter={(t) => new Date(t as number).toLocaleDateString("en-IN")} />
+                  <ReferenceLine y={currentPrice} stroke="#94a3b8" strokeDasharray="3 3" />
+                  <Line dataKey="price" stroke="#00d4ff" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  {results.map((r) => (
+                    <Line key={r.id} dataKey={r.id} stroke="rgba(0,255,136,0.25)" strokeWidth={1} dot={false} isAnimationActive={false} />
+                  ))}
+                  <Line dataKey="consensus" stroke="#00ff88" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+            {tab === "perf" && (
+              <ResponsiveContainer>
+                <BarChart data={perfData}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#94a3b8" }} angle={-30} textAnchor="end" height={60} />
+                  <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                  <Tooltip contentStyle={{ background: "#0d1117", border: "1px solid rgba(0,212,255,0.3)" }} />
+                  <RBar dataKey="rmse" fill="#00d4ff" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+            {tab === "mc" && mcData.length > 0 && (
+              <ResponsiveContainer>
+                <ComposedChart data={mcData}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.05)" />
+                  <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                  <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                  <Tooltip contentStyle={{ background: "#0d1117", border: "1px solid rgba(0,212,255,0.3)" }} />
+                  <Area dataKey="high" stroke="none" fill="rgba(0,212,255,0.2)" />
+                  <Area dataKey="low" stroke="none" fill="#060810" />
+                  <Line dataKey="median" stroke="#00ff88" strokeWidth={2} dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+            {tab === "ind" && lastFeature && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 h-full">
+                <Gauge label="RSI 14" value={lastFeature.rsi14} max={100} />
+                <Gauge label="MACD" value={lastFeature.macd} signed />
+                <Gauge label="BB position" value={((lastFeature.c - lastFeature.bbLower) / Math.max(lastFeature.bbWidth, 1e-6)) * 100} max={100} suffix="%" />
+                <Gauge label="ATR 14" value={lastFeature.atr14} />
+                <Gauge label="Volume Δ" value={lastFeature.volChange * 100} signed suffix="%" />
+                <Gauge label="vs SMA50" value={((lastFeature.c - lastFeature.sma50) / lastFeature.sma50) * 100} signed suffix="%" />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Nuances */}
+      {nuances.length > 0 && (
+        <div className="dx-glass p-4">
+          <h3 className="font-semibold mb-2">Key nuances</h3>
+          <ul className="text-sm space-y-1 text-muted-foreground list-disc list-inside">
+            {nuances.map((n, i) => <li key={i}>{n}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {/* Risks */}
+      {risks.length > 0 && (
+        <div className="p-4 rounded border" style={{ borderColor: "#ff4466", background: "rgba(255,68,102,0.08)" }}>
+          <h3 className="font-semibold mb-2 flex items-center gap-2" style={{ color: "#ff4466" }}>
+            <AlertTriangle className="w-4 h-4" /> Risk flags
+          </h3>
+          <ul className="text-sm space-y-1 list-disc list-inside" style={{ color: "#ffaaaa" }}>
+            {risks.map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground italic border-t border-border pt-3">
+        Dexter's 17-model algorithmic signal is for informational purposes only. Not SEBI-registered investment
+        advice. Past model accuracy does not guarantee future performance. Always consult a SEBI-registered
+        advisor before investing.
+      </p>
+    </div>
+  );
+}
+
+function ModelCard({ r, currency }: { r: ModelResult; currency: string }) {
+  const c = SIGNAL_COLORS[r.signal] || SIGNAL_COLORS.HOLD;
+  const sparkPath = useMemo(() => {
+    if (!r.forecast.length) return "";
+    const w = 120; const h = 32;
+    const min = Math.min(...r.forecast); const max = Math.max(...r.forecast);
+    const range = max - min || 1;
+    return r.forecast.map((v, i) => {
+      const x = (i / (r.forecast.length - 1)) * w;
+      const y = h - ((v - min) / range) * h;
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+  }, [r.forecast]);
+  return (
+    <div className="p-3 rounded-lg border" style={{ borderColor: "rgba(0,212,255,0.15)", background: "#0d1117" }}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold truncate">{r.name}</div>
+          <div className="text-[10px] text-muted-foreground font-mono uppercase">{r.category}</div>
+        </div>
+        <SignalBadge label={r.signal} />
+      </div>
+      <div className="mt-2 flex items-end justify-between">
+        <div>
+          <div className="text-lg font-mono">{fmtPrice(r.forecast[r.forecast.length - 1] ?? 0, currency)}</div>
+          <div className="text-xs font-mono" style={{ color: r.expectedReturn >= 0 ? "#00ff88" : "#ff4466" }}>
+            {r.expectedReturn >= 0 ? "+" : ""}{r.expectedReturn.toFixed(2)}%
+          </div>
+        </div>
+        <svg width={120} height={32}>
+          <path d={sparkPath} fill="none" stroke={c.tx} strokeWidth={1.5} />
+        </svg>
+      </div>
+      <div className="mt-2 flex justify-between text-[10px] text-muted-foreground font-mono">
+        <span>RMSE {r.rmse.toFixed(2)}</span>
+        <span>MAPE {r.mape.toFixed(1)}%</span>
+        <span>Conf {r.confidence.toFixed(0)}%</span>
+      </div>
+      {r.note && <div className="mt-1 text-[10px] text-amber-400/70">{r.note}</div>}
+    </div>
+  );
+}
+
+function Gauge({ label, value, max, signed, suffix }: { label: string; value: number; max?: number; signed?: boolean; suffix?: string }) {
+  const v = Number.isFinite(value) ? value : 0;
+  const pct = max ? Math.max(0, Math.min(100, (v / max) * 100)) : signed ? 50 + Math.max(-50, Math.min(50, v / 2)) : 50;
+  const color = signed ? (v >= 0 ? "#00ff88" : "#ff4466") : pct > 70 ? "#ff4466" : pct < 30 ? "#00ff88" : "#ffaa00";
+  return (
+    <div className="p-3 rounded border border-border bg-background/40 flex flex-col justify-between">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="text-xl font-mono">{v.toFixed(2)}{suffix || ""}</div>
+      <div className="h-1.5 bg-muted rounded mt-2"><div className="h-full rounded" style={{ width: `${pct}%`, background: color }} /></div>
+    </div>
+  );
+}
