@@ -10,10 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WatchlistRouteImport } from './routes/watchlist'
+import { Route as SipRouteImport } from './routes/sip'
 import { Route as ShadowRouteImport } from './routes/shadow'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ScreenerRouteImport } from './routes/screener'
 import { Route as ScoreRouteImport } from './routes/score'
 import { Route as ScannerRouteImport } from './routes/scanner'
+import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PitchRouteImport } from './routes/pitch'
 import { Route as OptimizerRouteImport } from './routes/optimizer'
 import { Route as NewsRouteImport } from './routes/news'
@@ -30,6 +33,11 @@ const WatchlistRoute = WatchlistRouteImport.update({
   path: '/watchlist',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SipRoute = SipRouteImport.update({
+  id: '/sip',
+  path: '/sip',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ShadowRoute = ShadowRouteImport.update({
   id: '/shadow',
   path: '/shadow',
@@ -40,6 +48,11 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ScreenerRoute = ScreenerRouteImport.update({
+  id: '/screener',
+  path: '/screener',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ScoreRoute = ScoreRouteImport.update({
   id: '/score',
   path: '/score',
@@ -48,6 +61,11 @@ const ScoreRoute = ScoreRouteImport.update({
 const ScannerRoute = ScannerRouteImport.update({
   id: '/scanner',
   path: '/scanner',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortfolioRoute = PortfolioRouteImport.update({
+  id: '/portfolio',
+  path: '/portfolio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PitchRoute = PitchRouteImport.update({
@@ -112,10 +130,13 @@ export interface FileRoutesByFullPath {
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
+  '/portfolio': typeof PortfolioRoute
   '/scanner': typeof ScannerRoute
   '/score': typeof ScoreRoute
+  '/screener': typeof ScreenerRoute
   '/settings': typeof SettingsRoute
   '/shadow': typeof ShadowRoute
+  '/sip': typeof SipRoute
   '/watchlist': typeof WatchlistRoute
 }
 export interface FileRoutesByTo {
@@ -129,10 +150,13 @@ export interface FileRoutesByTo {
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
+  '/portfolio': typeof PortfolioRoute
   '/scanner': typeof ScannerRoute
   '/score': typeof ScoreRoute
+  '/screener': typeof ScreenerRoute
   '/settings': typeof SettingsRoute
   '/shadow': typeof ShadowRoute
+  '/sip': typeof SipRoute
   '/watchlist': typeof WatchlistRoute
 }
 export interface FileRoutesById {
@@ -147,10 +171,13 @@ export interface FileRoutesById {
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
+  '/portfolio': typeof PortfolioRoute
   '/scanner': typeof ScannerRoute
   '/score': typeof ScoreRoute
+  '/screener': typeof ScreenerRoute
   '/settings': typeof SettingsRoute
   '/shadow': typeof ShadowRoute
+  '/sip': typeof SipRoute
   '/watchlist': typeof WatchlistRoute
 }
 export interface FileRouteTypes {
@@ -166,10 +193,13 @@ export interface FileRouteTypes {
     | '/news'
     | '/optimizer'
     | '/pitch'
+    | '/portfolio'
     | '/scanner'
     | '/score'
+    | '/screener'
     | '/settings'
     | '/shadow'
+    | '/sip'
     | '/watchlist'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -183,10 +213,13 @@ export interface FileRouteTypes {
     | '/news'
     | '/optimizer'
     | '/pitch'
+    | '/portfolio'
     | '/scanner'
     | '/score'
+    | '/screener'
     | '/settings'
     | '/shadow'
+    | '/sip'
     | '/watchlist'
   id:
     | '__root__'
@@ -200,10 +233,13 @@ export interface FileRouteTypes {
     | '/news'
     | '/optimizer'
     | '/pitch'
+    | '/portfolio'
     | '/scanner'
     | '/score'
+    | '/screener'
     | '/settings'
     | '/shadow'
+    | '/sip'
     | '/watchlist'
   fileRoutesById: FileRoutesById
 }
@@ -218,10 +254,13 @@ export interface RootRouteChildren {
   NewsRoute: typeof NewsRoute
   OptimizerRoute: typeof OptimizerRoute
   PitchRoute: typeof PitchRoute
+  PortfolioRoute: typeof PortfolioRoute
   ScannerRoute: typeof ScannerRoute
   ScoreRoute: typeof ScoreRoute
+  ScreenerRoute: typeof ScreenerRoute
   SettingsRoute: typeof SettingsRoute
   ShadowRoute: typeof ShadowRoute
+  SipRoute: typeof SipRoute
   WatchlistRoute: typeof WatchlistRoute
 }
 
@@ -232,6 +271,13 @@ declare module '@tanstack/react-router' {
       path: '/watchlist'
       fullPath: '/watchlist'
       preLoaderRoute: typeof WatchlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sip': {
+      id: '/sip'
+      path: '/sip'
+      fullPath: '/sip'
+      preLoaderRoute: typeof SipRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/shadow': {
@@ -248,6 +294,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/screener': {
+      id: '/screener'
+      path: '/screener'
+      fullPath: '/screener'
+      preLoaderRoute: typeof ScreenerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/score': {
       id: '/score'
       path: '/score'
@@ -260,6 +313,13 @@ declare module '@tanstack/react-router' {
       path: '/scanner'
       fullPath: '/scanner'
       preLoaderRoute: typeof ScannerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portfolio': {
+      id: '/portfolio'
+      path: '/portfolio'
+      fullPath: '/portfolio'
+      preLoaderRoute: typeof PortfolioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/pitch': {
@@ -346,10 +406,13 @@ const rootRouteChildren: RootRouteChildren = {
   NewsRoute: NewsRoute,
   OptimizerRoute: OptimizerRoute,
   PitchRoute: PitchRoute,
+  PortfolioRoute: PortfolioRoute,
   ScannerRoute: ScannerRoute,
   ScoreRoute: ScoreRoute,
+  ScreenerRoute: ScreenerRoute,
   SettingsRoute: SettingsRoute,
   ShadowRoute: ShadowRoute,
+  SipRoute: SipRoute,
   WatchlistRoute: WatchlistRoute,
 }
 export const routeTree = rootRouteImport
