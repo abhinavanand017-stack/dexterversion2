@@ -15,11 +15,14 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { NeuralCanvas } from "@/components/NeuralCanvas";
 import { StatusBar } from "@/components/StatusBar";
 import { TickerBar } from "@/components/TickerBar";
+import { MarketTickerBar } from "@/components/MarketTickerBar";
 import { AppSidebar, MobileTabBar, TourProgressBar } from "@/components/AppSidebar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { DemoBanner } from "@/components/DemoBanner";
 import { Footer } from "@/components/Footer";
 import { CircuitBreakerOverlay } from "@/components/CircuitBreakerOverlay";
+import { WatchlistDrawer } from "@/components/WatchlistDrawer";
+import { CommandPalette, useCommandPalette } from "@/components/CommandPalette";
 import { useDexterState } from "@/hooks/useDexterState";
 import { useDemoSequence } from "@/hooks/useDemoSequence";
 
@@ -132,6 +135,7 @@ function BodyAttrs() {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useDemoSequence();
+  const cmdk = useCommandPalette();
   return (
     <QueryClientProvider client={queryClient}>
       <BodyAttrs />
@@ -147,8 +151,13 @@ function RootComponent() {
             <div className="flex items-center gap-2">
               <SidebarTrigger className="ml-2 hidden md:inline-flex" />
               <div className="flex-1 min-w-0"><StatusBar /></div>
+              <button onClick={() => cmdk.setOpen(true)} className="mr-2 hidden md:flex items-center gap-1.5 px-2 py-1 rounded border border-border bg-card/40 hover:bg-card text-[10px] font-mono text-muted-foreground">
+                <span>Search</span>
+                <kbd className="border border-border rounded px-1">⌘K</kbd>
+              </button>
             </div>
             <TickerBar />
+            <MarketTickerBar />
             <main className="flex-1 p-4 md:p-6 max-w-[1600px] w-full mx-auto">
               <Outlet />
             </main>
@@ -156,6 +165,8 @@ function RootComponent() {
         </div>
       </SidebarProvider>
       <MobileTabBar />
+      <WatchlistDrawer />
+      <CommandPalette open={cmdk.open} onClose={() => cmdk.setOpen(false)} />
       <Footer />
       <CircuitBreakerOverlay />
       <Toaster theme="dark" position="top-right" richColors />
