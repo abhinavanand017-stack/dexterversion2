@@ -91,6 +91,15 @@
   --gradient-card: linear-gradient(180deg, oklch(0.2 0.04 255 / 0.7), oklch(0.15 0.03 250 / 0.85));
 }
 
+/* Theme variant: Midnight Blue */
+[data-theme="midnight"] {
+  --background: oklch(0.16 0.05 260);
+  --card: oklch(0.22 0.06 265 / 0.85);
+  --primary: oklch(0.7 0.18 250);
+  --cyan: oklch(0.7 0.18 250);
+  --gradient-bio: linear-gradient(135deg, oklch(0.7 0.18 250), oklch(0.5 0.22 280));
+}
+
 /* Mode: Elevated Arousal — switches palette to red warning */
 [data-arousal="elevated"],
 [data-arousal="critical"] {

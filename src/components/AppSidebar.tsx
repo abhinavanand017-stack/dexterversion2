@@ -2,6 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   Home, BarChart3, Activity, Newspaper, Search, Eye, Target, Settings, Play, X, Menu, Brain,
+  LineChart, Calculator, Briefcase,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -11,11 +12,14 @@ import { useDexterState } from "@/hooks/useDexterState";
 
 export const NAV_ITEMS = [
   { to: "/", label: "Overview", icon: Home },
+  { to: "/screener", label: "Market Screener", icon: LineChart },
+  { to: "/funds", label: "Fund Screener", icon: Search },
+  { to: "/portfolio", label: "Portfolio", icon: Briefcase },
+  { to: "/sip", label: "SIP Calculator", icon: Calculator },
   { to: "/forecast", label: "Forecaster", icon: Brain },
   { to: "/optimizer", label: "Portfolio Optimizer", icon: BarChart3 },
   { to: "/biometrics", label: "Biometrics Lab", icon: Activity },
   { to: "/news", label: "Market News", icon: Newspaper },
-  { to: "/funds", label: "Fund Screener", icon: Search },
   { to: "/shadow", label: "Shadow Portfolio", icon: Eye },
   { to: "/score", label: "Dexter Score", icon: Target },
   { to: "/settings", label: "Settings", icon: Settings },
