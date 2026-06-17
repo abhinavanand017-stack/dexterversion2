@@ -1,9 +1,18 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useMarketData } from "@/hooks/useMarketData";
 import { useMarketStatus } from "@/hooks/useMarketStatus";
 import { formatNum } from "@/lib/formatINR";
 
 const LABELS: Record<string, string> = { nifty: "NIFTY 50", sensex: "SENSEX", vix: "INDIA VIX" };
+
+const SOURCE_META: Record<string, { color: string; label: string }> = {
+  yahoo:       { color: "#22c55e", label: "live · yahoo" },
+  marketstack: { color: "#22c55e", label: "live · marketstack" },
+  twelvedata:  { color: "#22c55e", label: "live · twelvedata" },
+  cached:      { color: "#f59e0b", label: "cached" },
+  seed:        { color: "#ef4444", label: "fallback" },
+  init:        { color: "#94a3b8", label: "loading" },
+};
 
 const Item = memo(function Item({
   label, price, change, pct,
@@ -33,14 +42,29 @@ const Item = memo(function Item({
   );
 });
 
+function useAgoTick(lastMs: number | null): string {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (!lastMs) return "";
+  const s = Math.max(0, Math.round((Date.now() - lastMs) / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ago`;
+}
+
 export function TickerBar() {
   const data = useMarketData();
   const market = useMarketStatus();
+  const ago = useAgoTick(data.lastUpdatedMs);
   const items = [
     { key: "nifty", ...data.nifty },
     { key: "sensex", ...data.sensex },
     { key: "vix", ...data.vix },
   ];
+  const src = SOURCE_META[data.source] ?? SOURCE_META.init;
   return (
     <div className="flex flex-col">
       <div className="dx-ticker flex-wrap">
@@ -56,12 +80,22 @@ export function TickerBar() {
         {items.map((q) => (
           <Item key={q.key} label={LABELS[q.key]} price={q.price} change={q.change} pct={q.pct} />
         ))}
-        <span className="ml-auto text-[10px] text-muted-foreground font-mono">
-          {data.isLive && data.lastUpdated
-            ? `Updated ${data.lastUpdated} IST`
-            : market.status === "closed"
-              ? "Showing last session values"
-              : "Connecting…"}
+        <span className="ml-auto flex items-center gap-2 text-[10px] font-mono">
+          <span
+            className="inline-block w-1.5 h-1.5 rounded-full"
+            style={{ background: src.color, boxShadow: `0 0 6px ${src.color}` }}
+            aria-hidden
+          />
+          <span style={{ color: src.color }} title={`Source: ${src.label}`}>{src.label}</span>
+          {data.lastUpdatedMs && <span className="text-muted-foreground">· updated {ago}</span>}
+          {data.failed && (
+            <button
+              onClick={data.retry}
+              className="ml-1 px-1.5 py-0.5 rounded border border-red-500/50 text-red-400 hover:bg-red-500/10"
+            >
+              retry
+            </button>
+          )}
         </span>
       </div>
     </div>

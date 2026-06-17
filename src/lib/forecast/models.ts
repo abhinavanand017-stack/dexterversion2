@@ -473,10 +473,37 @@ export function monteCarlo(rows: FeatureRow[], horizon: number): ModelResult {
 }
 
 // ============= Run all =============
-export const ALL_MODELS: Array<(rows: FeatureRow[], horizon: number) => ModelResult> = [
-  arima, sarima, ets, linreg, ridge, randomForest, gbm, svr, knn,
-  lstm, gru, transformer, cnn1d, prophet, ensemble, monteCarlo, wavenet,
+export interface ModelSpec {
+  id: string;
+  name: string;
+  category: ModelCategory;
+  groupLabel: "Classic statistical" | "Machine learning" | "Deep learning" | "Ensemble & simulation";
+  tooltip: string;
+  fn: (rows: FeatureRow[], horizon: number) => ModelResult;
+  recommended?: boolean;
+}
+
+export const MODEL_SPECS: ModelSpec[] = [
+  { id: "arima",       name: "ARIMA",              category: "Statistical",   groupLabel: "Classic statistical",   tooltip: "Good for short-term trends in stable stocks.", fn: arima, recommended: true },
+  { id: "sarima",      name: "SARIMA",             category: "Statistical",   groupLabel: "Classic statistical",   tooltip: "ARIMA with seasonality — useful for cyclical patterns.", fn: sarima },
+  { id: "ets",         name: "ETS (Holt-Winters)", category: "Statistical",   groupLabel: "Classic statistical",   tooltip: "Smooths trend + level — robust to noise.", fn: ets },
+  { id: "linreg",      name: "Linear Regression",  category: "ML",            groupLabel: "Machine learning",      tooltip: "Simple baseline — captures linear momentum.", fn: linreg },
+  { id: "ridge",       name: "Ridge Regression",   category: "ML",            groupLabel: "Machine learning",      tooltip: "Regularised linear model — stable across many indicators.", fn: ridge },
+  { id: "rf",          name: "Random Forest",      category: "ML",            groupLabel: "Machine learning",      tooltip: "Captures non-linear patterns from indicators.", fn: randomForest, recommended: true },
+  { id: "gbm",         name: "HistGBM",            category: "ML",            groupLabel: "Machine learning",      tooltip: "Gradient boosting — strong on tabular features.", fn: gbm },
+  { id: "svr",         name: "SVR",                category: "ML",            groupLabel: "Machine learning",      tooltip: "Support vector regression — handles outliers.", fn: svr },
+  { id: "knn",         name: "KNN",                category: "ML",            groupLabel: "Machine learning",      tooltip: "Finds similar historical setups and averages outcomes.", fn: knn },
+  { id: "lstm",        name: "LSTM (lite)",        category: "Deep Learning", groupLabel: "Deep learning",         tooltip: "Sequence model — captures longer historical patterns.", fn: lstm, recommended: true },
+  { id: "gru",         name: "GRU (lite)",         category: "Deep Learning", groupLabel: "Deep learning",         tooltip: "Lighter LSTM cousin — faster, similar idea.", fn: gru },
+  { id: "transformer", name: "Transformer (lite)", category: "Deep Learning", groupLabel: "Deep learning",         tooltip: "Attention model — weighs past days non-linearly.", fn: transformer },
+  { id: "cnn1d",       name: "1D CNN (lite)",      category: "Deep Learning", groupLabel: "Deep learning",         tooltip: "Convolutional filters over the price window.", fn: cnn1d },
+  { id: "wavenet",     name: "WaveNet (lite)",     category: "Deep Learning", groupLabel: "Deep learning",         tooltip: "Dilated convolutions — multi-scale temporal patterns.", fn: wavenet },
+  { id: "prophet",     name: "Prophet (decomp)",   category: "Probabilistic", groupLabel: "Ensemble & simulation", tooltip: "Trend + seasonality decomposition (Prophet-style).", fn: prophet, recommended: true },
+  { id: "ensemble",    name: "Ensemble Blend",     category: "Probabilistic", groupLabel: "Ensemble & simulation", tooltip: "Weighted average of selected models.", fn: ensemble, recommended: true },
+  { id: "mc",          name: "Monte Carlo",        category: "Probabilistic", groupLabel: "Ensemble & simulation", tooltip: "Thousands of random walks — gives a probability range.", fn: monteCarlo },
 ];
+
+export const ALL_MODELS: Array<(rows: FeatureRow[], horizon: number) => ModelResult> = MODEL_SPECS.map((s) => s.fn);
 
 export interface RunProgress {
   done: number;
@@ -484,22 +511,31 @@ export interface RunProgress {
   current?: string;
 }
 
+export async function runSelected(
+  rows: FeatureRow[],
+  horizon: number,
+  ids: string[],
+  onProgress?: (r: ModelResult, p: RunProgress) => void,
+): Promise<ModelResult[]> {
+  const specs = MODEL_SPECS.filter((s) => ids.includes(s.id));
+  const out: ModelResult[] = [];
+  for (let i = 0; i < specs.length; i++) {
+    await new Promise((r) => setTimeout(r, 0));
+    try {
+      const res = specs[i].fn(rows, horizon);
+      out.push(res);
+      onProgress?.(res, { done: i + 1, total: specs.length, current: specs[i].name });
+    } catch (e) {
+      console.error("model failed", specs[i].id, e);
+    }
+  }
+  return out;
+}
+
 export async function runAll(
   rows: FeatureRow[],
   horizon: number,
   onProgress?: (r: ModelResult, p: RunProgress) => void,
 ): Promise<ModelResult[]> {
-  const out: ModelResult[] = [];
-  const total = ALL_MODELS.length;
-  for (let i = 0; i < ALL_MODELS.length; i++) {
-    await new Promise((r) => setTimeout(r, 0)); // yield
-    try {
-      const res = ALL_MODELS[i](rows, horizon);
-      out.push(res);
-      onProgress?.(res, { done: i + 1, total, current: res.name });
-    } catch (e) {
-      console.error("model failed", i, e);
-    }
-  }
-  return out;
+  return runSelected(rows, horizon, MODEL_SPECS.map((s) => s.id), onProgress);
 }
