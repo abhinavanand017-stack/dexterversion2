@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { getYahooQuotes, type YahooQuote } from "@/lib/yahoo.functions";
+import { getYahooQuotes, type YahooQuote, type QuoteSource } from "@/lib/yahoo.functions";
 import { useDexterState } from "./useDexterState";
 import { useMarketStatus } from "./useMarketStatus";
 
@@ -15,54 +15,62 @@ export interface MarketData {
   sensex: YahooQuote;
   vix: YahooQuote;
   lastUpdated: string | null;
+  lastUpdatedMs: number | null;
   isLive: boolean;
+  source: QuoteSource | "init";
+  failed: boolean;
+  retry: () => void;
 }
 
-export function useMarketData(pollMs = 30_000): MarketData {
-  const [data, setData] = useState<MarketData>({
+export function useMarketData(pollMs = 15_000): MarketData {
+  const [data, setData] = useState<Omit<MarketData, "retry">>({
     nifty: SEED.nifty, sensex: SEED.sensex, vix: SEED.vix,
-    lastUpdated: null, isLive: false,
+    lastUpdated: null, lastUpdatedMs: null, isLive: false, source: "init", failed: false,
   });
   const fetchYahoo = useServerFn(getYahooQuotes);
   const setHealth = useDexterState((s) => s.setDataHealth);
   const market = useMarketStatus();
+  const [nonce, setNonce] = useState(0);
+  const retry = useCallback(() => setNonce((n) => n + 1), []);
 
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const tick = async () => {
-      // Pause polling when market closed; keep last values.
-      if (market.status === "closed") {
-        timer = setTimeout(tick, pollMs * 4);
-        return;
-      }
       try {
         const res = await fetchYahoo();
         if (cancelled) return;
-        if (res.ok && res.quotes.length === 3) {
-          const map = Object.fromEntries(res.quotes.map((q) => [q.symbol, q])) as Record<string, YahooQuote>;
-          setData({
-            nifty: map.nifty ?? SEED.nifty,
-            sensex: map.sensex ?? SEED.sensex,
-            vix: map.vix ?? SEED.vix,
-            lastUpdated: new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }),
-            isLive: true,
-          });
-          setHealth("live");
-        } else {
-          setHealth("degraded");
-        }
+        const map = Object.fromEntries(res.quotes.map((q) => [q.symbol, q])) as Record<string, YahooQuote>;
+        const now = Date.now();
+        const isLive = res.source === "yahoo" || res.source === "marketstack" || res.source === "twelvedata";
+        setData({
+          nifty: map.nifty ?? SEED.nifty,
+          sensex: map.sensex ?? SEED.sensex,
+          vix: map.vix ?? SEED.vix,
+          lastUpdated: new Date(now).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour12: false }),
+          lastUpdatedMs: now,
+          isLive,
+          source: res.source,
+          failed: res.source === "seed",
+        });
+        setHealth(isLive ? "live" : "degraded");
       } catch {
-        if (!cancelled) setHealth("degraded");
+        if (!cancelled) {
+          setHealth("degraded");
+          setData((d) => ({ ...d, failed: !d.lastUpdatedMs, source: d.lastUpdatedMs ? "cached" : "seed" }));
+        }
       } finally {
-        if (!cancelled) timer = setTimeout(tick, pollMs);
+        if (!cancelled) {
+          const next = market.status === "closed" ? pollMs * 4 : pollMs;
+          timer = setTimeout(tick, next);
+        }
       }
     };
 
     tick();
     return () => { cancelled = true; if (timer) clearTimeout(timer); };
-  }, [fetchYahoo, pollMs, market.status, setHealth]);
+  }, [fetchYahoo, pollMs, market.status, setHealth, nonce]);
 
-  return data;
+  return { ...data, retry };
 }
