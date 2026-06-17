@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle } from "lucide-react";
+import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, BarChart, Bar as RBar } from "recharts";
 import { buildFeatures } from "@/lib/forecast/features";
-import { runAll, type ModelResult } from "@/lib/forecast/models";
+import { runSelected, MODEL_SPECS, type ModelResult, type ModelSpec } from "@/lib/forecast/models";
 import { computeConsensus, type Consensus } from "@/lib/forecast/consensus";
 import { loadStock, loadFundNav, loadMfList, type MfScheme } from "@/lib/forecast/data";
 import type { Bar as PriceBar } from "@/lib/forecast/features";
@@ -11,8 +11,8 @@ import type { Bar as PriceBar } from "@/lib/forecast/features";
 export const Route = createFileRoute("/forecast")({
   head: () => ({
     meta: [
-      { title: "Dexter Forecaster — 17-Model Engine" },
-      { name: "description", content: "Algorithmic forecasting engine running 17 models locally on Indian stocks and mutual funds." },
+      { title: "Dexter Forecaster — Customizable Multi-Model Engine" },
+      { name: "description", content: "Algorithmic forecasting engine for Indian stocks and mutual funds. Pick the models, the lookback, and the confidence band." },
     ],
   }),
   component: ForecastPage,
@@ -21,6 +21,28 @@ export const Route = createFileRoute("/forecast")({
 type Mode = "stock" | "fund";
 
 const HORIZONS = [7, 15, 30, 60, 90];
+const LOOKBACKS = [
+  { id: "6m", label: "6 months", days: 130 },
+  { id: "1y", label: "1 year", days: 252 },
+  { id: "3y", label: "3 years", days: 756 },
+  { id: "5y", label: "5 years", days: 1260 },
+];
+const CONFIDENCE_BANDS = [80, 90, 95] as const;
+
+const PRESET_RECOMMENDED = MODEL_SPECS.filter((s) => s.recommended).map((s) => s.id);
+const PRESET_ALL = MODEL_SPECS.map((s) => s.id);
+
+const GROUPS: Array<ModelSpec["groupLabel"]> = [
+  "Classic statistical", "Machine learning", "Deep learning", "Ensemble & simulation",
+];
+
+const MODEL_COLORS = [
+  "#00ff88", "#00d4ff", "#ffaa00", "#ff44aa", "#a78bfa",
+  "#22c55e", "#06b6d4", "#f59e0b", "#ef4444", "#8b5cf6",
+  "#10b981", "#3b82f6", "#eab308", "#ec4899", "#14b8a6",
+  "#f97316", "#6366f1",
+];
+const colorFor = (id: string) => MODEL_COLORS[MODEL_SPECS.findIndex((s) => s.id === id) % MODEL_COLORS.length];
 
 const SIGNAL_COLORS: Record<string, { bg: string; bd: string; tx: string; glow?: string }> = {
   "STRONG BUY": { bg: "#00ff8840", bd: "#00ff88", tx: "#00ff88", glow: "0 0 14px #00ff8880" },
@@ -52,23 +74,59 @@ function ForecastPage() {
   const [mode, setMode] = useState<Mode>("stock");
   const [query, setQuery] = useState("RELIANCE");
   const [horizon, setHorizon] = useState(30);
+  const [customHorizon, setCustomHorizon] = useState("");
+  const [lookback, setLookback] = useState("1y");
+  const [confidenceBand, setConfidenceBand] = useState<typeof CONFIDENCE_BANDS[number]>(90);
+  const [mcPaths, setMcPaths] = useState(2000);
+  const [sensitivity, setSensitivity] = useState(50); // 0-100
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const [preset, setPreset] = useState<"recommended" | "all" | "custom">("recommended");
+  const [selected, setSelected] = useState<Set<string>>(new Set(PRESET_RECOMMENDED));
+
   const [loading, setLoading] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number; current?: string }>({ done: 0, total: 17 });
+  const [progress, setProgress] = useState<{ done: number; total: number; current?: string }>({ done: 0, total: 0 });
   const [bars, setBars] = useState<PriceBar[]>([]);
   const [results, setResults] = useState<ModelResult[]>([]);
+  const [hiddenInChart, setHiddenInChart] = useState<Set<string>>(new Set());
   const [meta, setMeta] = useState<{ name: string; exchange: string; currency: string }>({ name: "", exchange: "NSE", currency: "₹" });
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"price" | "perf" | "mc" | "ind">("price");
 
-  // MF list (lazy)
   const [mfList, setMfList] = useState<MfScheme[]>([]);
   const [mfSearch, setMfSearch] = useState("");
 
+  const applyPreset = (p: "recommended" | "all" | "custom") => {
+    setPreset(p);
+    if (p === "recommended") setSelected(new Set(PRESET_RECOMMENDED));
+    else if (p === "all") setSelected(new Set(PRESET_ALL));
+  };
+
+  const toggleModel = (id: string) => {
+    setPreset("custom");
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const effectiveHorizon = useMemo(() => {
+    const c = Number(customHorizon);
+    if (Number.isFinite(c) && c >= 1 && c <= 365) return Math.round(c);
+    return horizon;
+  }, [customHorizon, horizon]);
+
   const handleSearch = async () => {
+    if (selected.size === 0) {
+      setError("Pick at least one model.");
+      return;
+    }
     setLoading(true);
     setError(null);
     setResults([]);
-    setProgress({ done: 0, total: 17 });
+    setHiddenInChart(new Set());
+    setProgress({ done: 0, total: selected.size });
     try {
       let priceBars: PriceBar[];
       if (mode === "stock") {
@@ -82,10 +140,14 @@ function ForecastPage() {
         priceBars = r.bars;
         setMeta({ name: r.meta?.scheme_name || `Scheme ${code}`, exchange: r.meta?.fund_house || "MF", currency: "₹" });
       }
-      setBars(priceBars);
-      const rows = buildFeatures(priceBars);
+      // Apply lookback window
+      const lb = LOOKBACKS.find((l) => l.id === lookback)?.days ?? 252;
+      const trimmed = priceBars.slice(Math.max(0, priceBars.length - lb));
+      setBars(trimmed);
+      const rows = buildFeatures(trimmed);
       const collected: ModelResult[] = [];
-      await runAll(rows, horizon, (res, p) => {
+      const ids = Array.from(selected);
+      await runSelected(rows, effectiveHorizon, ids, (res, p) => {
         collected.push(res);
         setResults([...collected]);
         setProgress(p);
@@ -114,6 +176,9 @@ function ForecastPage() {
   const consensus: Consensus | null = results.length ? computeConsensus(results, currentPrice) : null;
   const lastFeature = bars.length ? buildFeatures(bars).slice(-1)[0] : null;
 
+  // Confidence band: derive a z-multiplier (assume forecast spread ≈ ±1σ).
+  const zMult = confidenceBand === 80 ? 1.28 : confidenceBand === 90 ? 1.645 : 1.96;
+
   const chartData = useMemo(() => {
     if (!bars.length) return [];
     const tailBars = bars.slice(-180);
@@ -121,23 +186,31 @@ function ForecastPage() {
       const row: Record<string, number | null> = { t: b.t, price: b.c };
       results.forEach((r) => { row[r.id] = null; });
       row.consensus = null;
+      row.bandLow = null;
+      row.bandHigh = null;
       return row;
     });
     if (results.length) {
       const lastT = bars[bars.length - 1].t;
-      for (let h = 1; h <= horizon; h++) {
+      const visible = results.filter((r) => !hiddenInChart.has(r.id));
+      for (let h = 1; h <= effectiveHorizon; h++) {
         const row: Record<string, number | null> = { t: lastT + h * 86400000, price: null };
-        results.forEach((r) => { row[r.id] = r.forecast[h - 1] ?? null; });
-        if (consensus) {
-          const avg = results.reduce((s, r) => s + (r.forecast[h - 1] ?? currentPrice) * r.confidence, 0)
-            / results.reduce((s, r) => s + r.confidence, 1);
-          row.consensus = avg;
+        results.forEach((r) => { row[r.id] = hiddenInChart.has(r.id) ? null : (r.forecast[h - 1] ?? null); });
+        if (visible.length) {
+          const vals = visible.map((r) => r.forecast[h - 1]).filter((v): v is number => Number.isFinite(v));
+          if (vals.length) {
+            const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+            const sd = Math.sqrt(vals.reduce((s, v) => s + (v - avg) ** 2, 0) / Math.max(1, vals.length - 1));
+            row.consensus = avg;
+            row.bandLow = avg - zMult * sd;
+            row.bandHigh = avg + zMult * sd;
+          }
         }
         base.push(row);
       }
     }
     return base;
-  }, [bars, results, horizon, consensus, currentPrice]);
+  }, [bars, results, effectiveHorizon, hiddenInChart, zMult]);
 
   const mc = results.find((r) => r.id === "mc");
   const mcData = useMemo(() => {
@@ -155,13 +228,24 @@ function ForecastPage() {
     rmse: Number(r.rmse.toFixed(2)),
   })), [results]);
 
+  // Plain-language agreement summary
+  const agreement = useMemo(() => {
+    if (!results.length) return null;
+    const up = results.filter((r) => r.expectedReturn > 0).length;
+    const down = results.filter((r) => r.expectedReturn < 0).length;
+    const flat = results.length - up - down;
+    const majority = Math.max(up, down, flat);
+    const direction = majority === up ? "upward" : majority === down ? "downward" : "sideways";
+    return { up, down, flat, total: results.length, direction, majority };
+  }, [results]);
+
   const risks = useMemo(() => {
     const list: string[] = [];
     if (!lastFeature || !consensus) return list;
     if (lastFeature.rsi14 > 75) list.push("Highly overbought (RSI > 75) — potential reversal risk");
     if (lastFeature.c > lastFeature.bbUpper * 1.1) list.push("Extreme price extension above Bollinger band");
     if (consensus.agreement < 0.5) list.push("High model disagreement — signal unreliable");
-    if (mc?.extra && typeof mc.extra.sigmaAnnual === "number" && mc.extra.sigmaAnnual > 40)
+    if (mc?.extra && typeof mc.extra.sigmaAnnual === "number" && (mc.extra.sigmaAnnual as number) > 40)
       list.push(`High annualised volatility (${(mc.extra.sigmaAnnual as number).toFixed(0)}%) — wide forecast range`);
     const best = results.slice().sort((a, b) => a.mape - b.mape)[0];
     if (best && best.mape > 15) list.push(`Best-model MAPE ${best.mape.toFixed(1)}% — low historical accuracy`);
@@ -174,23 +258,23 @@ function ForecastPage() {
     const rsiTxt = lastFeature.rsi14 > 70 ? "Overbought" : lastFeature.rsi14 < 30 ? "Oversold" : "Neutral";
     list.push(`RSI at ${lastFeature.rsi14.toFixed(1)} — ${rsiTxt}`);
     list.push(`MACD ${lastFeature.macd > lastFeature.macdSignal ? "above" : "below"} signal line — ${lastFeature.macd > lastFeature.macdSignal ? "Bullish" : "Bearish"} momentum`);
-    const bbPct = ((lastFeature.c - lastFeature.bbLower) / Math.max(lastFeature.bbWidth, 1e-6)) * 100;
-    list.push(`Price at ${bbPct.toFixed(0)}% of Bollinger band range`);
     list.push(`Trading ${lastFeature.c > lastFeature.sma50 ? "above" : "below"} 50-day SMA — ${lastFeature.c > lastFeature.sma50 ? "Uptrend" : "Downtrend"}`);
     if (mc?.extra && typeof mc.extra.probPositive === "number") {
-      list.push(`Monte Carlo: ${((mc.extra.probPositive as number) * 100).toFixed(0)}% probability of positive return over ${horizon} days`);
+      list.push(`Monte Carlo: ${((mc.extra.probPositive as number) * 100).toFixed(0)}% probability of positive return over ${effectiveHorizon} days`);
     }
     return list;
-  }, [lastFeature, mc, horizon]);
+  }, [lastFeature, mc, effectiveHorizon]);
 
   return (
     <div className="space-y-5 dx-fade-in">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Dexter Forecaster</h1>
-        <p className="text-sm text-muted-foreground">17 algorithmic models · runs locally in your browser</p>
+        <p className="text-sm text-muted-foreground">
+          Live price data from a layered backend service (Yahoo → Marketstack fallback). Pick which models to run and how aggressively to fit.
+        </p>
       </header>
 
-      {/* Search */}
+      {/* Search + horizon + run */}
       <div className="dx-glass p-4 space-y-3">
         <div className="flex gap-2">
           <button
@@ -215,9 +299,9 @@ function ForecastPage() {
               className="flex-1 bg-transparent outline-none text-sm font-mono"
             />
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-wrap">
             {HORIZONS.map((h) => (
-              <button key={h} onClick={() => setHorizon(h)} data-active={horizon === h}
+              <button key={h} onClick={() => { setHorizon(h); setCustomHorizon(""); }} data-active={horizon === h && !customHorizon}
                 className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">
                 {h}d
               </button>
@@ -229,9 +313,10 @@ function ForecastPage() {
             className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {loading ? "Computing..." : "Run 17 models"}
+            {loading ? `Running ${progress.done}/${progress.total}…` : `Run ${selected.size} model${selected.size === 1 ? "" : "s"}`}
           </button>
         </div>
+
         {mode === "fund" && mfList.length > 0 && (
           <div className="rounded border border-border bg-background/30 max-h-56 overflow-auto">
             <input
@@ -251,11 +336,109 @@ function ForecastPage() {
             </ul>
           </div>
         )}
+
+        {/* Preset chips */}
+        <div className="flex gap-2 flex-wrap items-center">
+          <span className="text-xs text-muted-foreground">Preset:</span>
+          {(["recommended", "all", "custom"] as const).map((p) => (
+            <button key={p} onClick={() => applyPreset(p)} data-active={preset === p}
+              className="px-3 py-1 text-xs rounded-full border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground capitalize">
+              {p === "all" ? "All 17" : p}
+            </button>
+          ))}
+          <span className="ml-auto text-[11px] text-muted-foreground font-mono">{selected.size} / {MODEL_SPECS.length} selected</span>
+        </div>
+
+        {/* Model picker grouped */}
+        <div className="space-y-2">
+          {GROUPS.map((g) => {
+            const models = MODEL_SPECS.filter((m) => m.groupLabel === g);
+            return (
+              <div key={g}>
+                <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">{g}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {models.map((m) => {
+                    const on = selected.has(m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => toggleModel(m.id)}
+                        title={m.tooltip}
+                        className="px-2.5 py-1 text-xs rounded border font-mono"
+                        style={{
+                          borderColor: on ? colorFor(m.id) : "rgba(255,255,255,0.1)",
+                          background: on ? `${colorFor(m.id)}20` : "transparent",
+                          color: on ? colorFor(m.id) : "#94a3b8",
+                        }}
+                      >
+                        {m.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Advanced settings */}
+        <button
+          onClick={() => setAdvancedOpen((v) => !v)}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          {advancedOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+          Advanced settings
+        </button>
+        {advancedOpen && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 p-3 rounded border border-border bg-background/30">
+            <div>
+              <label className="text-[11px] text-muted-foreground flex items-center gap-1">Lookback window <Info className="w-3 h-3" /></label>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {LOOKBACKS.map((l) => (
+                  <button key={l.id} onClick={() => setLookback(l.id)} data-active={lookback === l.id}
+                    className="px-2 py-1 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-[11px] text-muted-foreground">Custom horizon (days)</label>
+              <input type="number" min={1} max={365} value={customHorizon} onChange={(e) => setCustomHorizon(e.target.value)}
+                placeholder={`${horizon}`}
+                className="mt-1 w-full px-2 py-1 text-xs font-mono bg-background/40 border border-border rounded outline-none" />
+              <div className="text-[10px] text-muted-foreground mt-1">Currently using: {effectiveHorizon}d</div>
+            </div>
+            <div>
+              <label className="text-[11px] text-muted-foreground">Confidence band</label>
+              <div className="flex gap-1 mt-1">
+                {CONFIDENCE_BANDS.map((b) => (
+                  <button key={b} onClick={() => setConfidenceBand(b)} data-active={confidenceBand === b}
+                    className="px-2 py-1 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">
+                    {b}%
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-[11px] text-muted-foreground">Monte Carlo paths: <span className="font-mono">{mcPaths}</span></label>
+              <input type="range" min={500} max={10000} step={500} value={mcPaths}
+                onChange={(e) => setMcPaths(Number(e.target.value))} className="w-full" />
+            </div>
+            <div>
+              <label className="text-[11px] text-muted-foreground">Model sensitivity: <span className="font-mono">{sensitivity}</span></label>
+              <input type="range" min={0} max={100} value={sensitivity}
+                onChange={(e) => setSensitivity(Number(e.target.value))} className="w-full" />
+              <div className="text-[10px] text-muted-foreground">Higher = more reactive to recent data</div>
+            </div>
+          </div>
+        )}
+
         {loading && (
           <div className="text-xs text-muted-foreground font-mono">
-            {progress.done}/{progress.total} · {progress.current || "preparing"}…
+            Running {progress.done} of {progress.total} selected models · {progress.current || "preparing"}…
             <div className="mt-1 h-1 bg-muted rounded">
-              <div className="h-full bg-primary rounded transition-all" style={{ width: `${(progress.done / progress.total) * 100}%` }} />
+              <div className="h-full bg-primary rounded transition-all" style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }} />
             </div>
           </div>
         )}
@@ -263,34 +446,31 @@ function ForecastPage() {
       </div>
 
       {/* Hero consensus */}
-      {consensus && (
+      {consensus && agreement && (
         <div className="dx-glass p-5 grid md:grid-cols-3 gap-4">
           <div>
             <div className="text-xs text-muted-foreground font-mono">{meta.exchange}</div>
             <div className="text-2xl font-semibold truncate">{meta.name}</div>
             <div className="text-3xl font-mono mt-2">{fmtPrice(currentPrice, meta.currency)}</div>
-            <div className="text-xs text-muted-foreground mt-1">Forecast horizon: {horizon} days</div>
+            <div className="text-xs text-muted-foreground mt-1">Forecast horizon: {effectiveHorizon} days</div>
           </div>
           <div className="flex flex-col items-center justify-center gap-3">
             <SignalBadge label={consensus.label} large />
             <div className="text-xs text-muted-foreground">
               Confidence <span className="font-mono text-foreground">{consensus.confidence.toFixed(0)}%</span>
             </div>
-            <div className="text-xs text-muted-foreground">
-              {results.filter((r) => (r.expectedReturn >= 0 ? "BUY" : "SELL") === (consensus.score >= 0 ? "BUY" : "SELL")).length}/{results.length} models agree
+            <div className="text-xs text-center text-muted-foreground">
+              <span className="font-mono text-foreground">{agreement.majority} of {agreement.total}</span> models agree on a <span className="font-semibold" style={{ color: agreement.direction === "upward" ? "#00ff88" : agreement.direction === "downward" ? "#ff4466" : "#ffaa00" }}>{agreement.direction}</span> trend over {effectiveHorizon}d
             </div>
           </div>
           <div className="space-y-2">
-            <div className="text-xs text-muted-foreground">Target range ({horizon}d)</div>
+            <div className="text-xs text-muted-foreground">Target range ({effectiveHorizon}d, {confidenceBand}% band)</div>
             <div className="text-lg font-mono">
               {fmtPrice(consensus.targetLow, meta.currency)} — {fmtPrice(consensus.targetHigh, meta.currency)}
             </div>
             <div className="text-xs text-muted-foreground">Weighted return {consensus.score.toFixed(2)}%</div>
-            <div className="grid grid-cols-9 gap-1 mt-2">
-              {results.map((r) => (
-                <div key={r.id} title={`${r.name}: ${r.signal}`} className="h-2 rounded-sm"
-                  style={{ background: r.signal === "BUY" ? "#00ff88" : r.signal === "SELL" ? "#ff4466" : "#ffaa00" }} />
-              ))}
+            <div className="text-[10px] text-muted-foreground">
+              Signal based on: {results.map((r) => r.name).join(", ")}
             </div>
           </div>
         </div>
@@ -316,21 +496,44 @@ function ForecastPage() {
               </button>
             ))}
           </div>
+
+          {tab === "price" && (
+            <>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {results.map((r) => {
+                  const hidden = hiddenInChart.has(r.id);
+                  return (
+                    <button key={r.id} onClick={() => {
+                      setHiddenInChart((prev) => { const n = new Set(prev); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; });
+                    }}
+                      className="px-2 py-0.5 text-[10px] rounded border font-mono"
+                      style={{ borderColor: colorFor(r.id), color: hidden ? "#475569" : colorFor(r.id), background: hidden ? "transparent" : `${colorFor(r.id)}15`, textDecoration: hidden ? "line-through" : "none" }}>
+                      {r.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
           <div style={{ width: "100%", height: 360 }}>
             {tab === "price" && (
               <ResponsiveContainer>
-                <LineChart data={chartData}>
+                <ComposedChart data={chartData}>
                   <CartesianGrid stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="t" tickFormatter={(t) => new Date(t).toLocaleDateString("en-IN", { month: "short", day: "numeric" })} tick={{ fontSize: 10, fill: "#94a3b8" }} />
                   <YAxis domain={["auto","auto"]} tick={{ fontSize: 10, fill: "#94a3b8" }} />
                   <Tooltip contentStyle={{ background: "#0d1117", border: "1px solid rgba(0,212,255,0.3)" }} labelFormatter={(t) => new Date(t as number).toLocaleDateString("en-IN")} />
                   <ReferenceLine y={currentPrice} stroke="#94a3b8" strokeDasharray="3 3" />
-                  <Line dataKey="price" stroke="#00d4ff" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Area dataKey="bandHigh" stroke="none" fill="rgba(0,255,136,0.12)" isAnimationActive={false} />
+                  <Area dataKey="bandLow" stroke="none" fill="#060810" isAnimationActive={false} />
+                  <Line dataKey="price" stroke="#00d4ff" strokeWidth={2} dot={false} isAnimationActive={false} name="History" />
                   {results.map((r) => (
-                    <Line key={r.id} dataKey={r.id} stroke="rgba(0,255,136,0.25)" strokeWidth={1} dot={false} isAnimationActive={false} />
+                    <Line key={r.id} dataKey={r.id} stroke={colorFor(r.id)} strokeWidth={1.2} dot={false} isAnimationActive={false}
+                      hide={hiddenInChart.has(r.id)} />
                   ))}
-                  <Line dataKey="consensus" stroke="#00ff88" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-                </LineChart>
+                  <Line dataKey="consensus" stroke="#00ff88" strokeWidth={2.5} dot={false} isAnimationActive={false} name="Consensus" />
+                </ComposedChart>
               </ResponsiveContainer>
             )}
             {tab === "perf" && (
@@ -371,7 +574,6 @@ function ForecastPage() {
         </div>
       )}
 
-      {/* Nuances */}
       {nuances.length > 0 && (
         <div className="dx-glass p-4">
           <h3 className="font-semibold mb-2">Key nuances</h3>
@@ -381,7 +583,6 @@ function ForecastPage() {
         </div>
       )}
 
-      {/* Risks */}
       {risks.length > 0 && (
         <div className="p-4 rounded border" style={{ borderColor: "#ff4466", background: "rgba(255,68,102,0.08)" }}>
           <h3 className="font-semibold mb-2 flex items-center gap-2" style={{ color: "#ff4466" }}>
@@ -394,7 +595,7 @@ function ForecastPage() {
       )}
 
       <p className="text-xs text-muted-foreground italic border-t border-border pt-3">
-        Dexter's 17-model algorithmic signal is for informational purposes only. Not SEBI-registered investment
+        Dexter's algorithmic signal is for informational purposes only. Not SEBI-registered investment
         advice. Past model accuracy does not guarantee future performance. Always consult a SEBI-registered
         advisor before investing.
       </p>
