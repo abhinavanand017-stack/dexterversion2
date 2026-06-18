@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WatchlistRouteImport } from './routes/watchlist'
+import { Route as TaxRouteImport } from './routes/tax'
 import { Route as SipRouteImport } from './routes/sip'
 import { Route as ShadowRouteImport } from './routes/shadow'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -20,10 +21,12 @@ import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PitchRouteImport } from './routes/pitch'
 import { Route as OptimizerRouteImport } from './routes/optimizer'
 import { Route as NewsRouteImport } from './routes/news'
+import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as FundsRouteImport } from './routes/funds'
 import { Route as ForecastRouteImport } from './routes/forecast'
 import { Route as DematRouteImport } from './routes/demat'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as CommunityRouteImport } from './routes/community'
 import { Route as BiometricsRouteImport } from './routes/biometrics'
 import { Route as BacktesterRouteImport } from './routes/backtester'
 import { Route as IndexRouteImport } from './routes/index'
@@ -31,6 +34,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const WatchlistRoute = WatchlistRouteImport.update({
   id: '/watchlist',
   path: '/watchlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TaxRoute = TaxRouteImport.update({
+  id: '/tax',
+  path: '/tax',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SipRoute = SipRouteImport.update({
@@ -83,6 +91,11 @@ const NewsRoute = NewsRouteImport.update({
   path: '/news',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GoalsRoute = GoalsRouteImport.update({
+  id: '/goals',
+  path: '/goals',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const FundsRoute = FundsRouteImport.update({
   id: '/funds',
   path: '/funds',
@@ -101,6 +114,11 @@ const DematRoute = DematRouteImport.update({
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CommunityRoute = CommunityRouteImport.update({
+  id: '/community',
+  path: '/community',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BiometricsRoute = BiometricsRouteImport.update({
@@ -123,10 +141,12 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/backtester': typeof BacktesterRoute
   '/biometrics': typeof BiometricsRoute
+  '/community': typeof CommunityRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
   '/forecast': typeof ForecastRoute
   '/funds': typeof FundsRoute
+  '/goals': typeof GoalsRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
@@ -137,16 +157,19 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/shadow': typeof ShadowRoute
   '/sip': typeof SipRoute
+  '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/backtester': typeof BacktesterRoute
   '/biometrics': typeof BiometricsRoute
+  '/community': typeof CommunityRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
   '/forecast': typeof ForecastRoute
   '/funds': typeof FundsRoute
+  '/goals': typeof GoalsRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
@@ -157,6 +180,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/shadow': typeof ShadowRoute
   '/sip': typeof SipRoute
+  '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
 }
 export interface FileRoutesById {
@@ -164,10 +188,12 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/backtester': typeof BacktesterRoute
   '/biometrics': typeof BiometricsRoute
+  '/community': typeof CommunityRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
   '/forecast': typeof ForecastRoute
   '/funds': typeof FundsRoute
+  '/goals': typeof GoalsRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
@@ -178,6 +204,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/shadow': typeof ShadowRoute
   '/sip': typeof SipRoute
+  '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
 }
 export interface FileRouteTypes {
@@ -186,10 +213,12 @@ export interface FileRouteTypes {
     | '/'
     | '/backtester'
     | '/biometrics'
+    | '/community'
     | '/dashboard'
     | '/demat'
     | '/forecast'
     | '/funds'
+    | '/goals'
     | '/news'
     | '/optimizer'
     | '/pitch'
@@ -200,16 +229,19 @@ export interface FileRouteTypes {
     | '/settings'
     | '/shadow'
     | '/sip'
+    | '/tax'
     | '/watchlist'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/backtester'
     | '/biometrics'
+    | '/community'
     | '/dashboard'
     | '/demat'
     | '/forecast'
     | '/funds'
+    | '/goals'
     | '/news'
     | '/optimizer'
     | '/pitch'
@@ -220,16 +252,19 @@ export interface FileRouteTypes {
     | '/settings'
     | '/shadow'
     | '/sip'
+    | '/tax'
     | '/watchlist'
   id:
     | '__root__'
     | '/'
     | '/backtester'
     | '/biometrics'
+    | '/community'
     | '/dashboard'
     | '/demat'
     | '/forecast'
     | '/funds'
+    | '/goals'
     | '/news'
     | '/optimizer'
     | '/pitch'
@@ -240,6 +275,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/shadow'
     | '/sip'
+    | '/tax'
     | '/watchlist'
   fileRoutesById: FileRoutesById
 }
@@ -247,10 +283,12 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BacktesterRoute: typeof BacktesterRoute
   BiometricsRoute: typeof BiometricsRoute
+  CommunityRoute: typeof CommunityRoute
   DashboardRoute: typeof DashboardRoute
   DematRoute: typeof DematRoute
   ForecastRoute: typeof ForecastRoute
   FundsRoute: typeof FundsRoute
+  GoalsRoute: typeof GoalsRoute
   NewsRoute: typeof NewsRoute
   OptimizerRoute: typeof OptimizerRoute
   PitchRoute: typeof PitchRoute
@@ -261,6 +299,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   ShadowRoute: typeof ShadowRoute
   SipRoute: typeof SipRoute
+  TaxRoute: typeof TaxRoute
   WatchlistRoute: typeof WatchlistRoute
 }
 
@@ -271,6 +310,13 @@ declare module '@tanstack/react-router' {
       path: '/watchlist'
       fullPath: '/watchlist'
       preLoaderRoute: typeof WatchlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tax': {
+      id: '/tax'
+      path: '/tax'
+      fullPath: '/tax'
+      preLoaderRoute: typeof TaxRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sip': {
@@ -343,6 +389,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NewsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/goals': {
+      id: '/goals'
+      path: '/goals'
+      fullPath: '/goals'
+      preLoaderRoute: typeof GoalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/funds': {
       id: '/funds'
       path: '/funds'
@@ -369,6 +422,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/community': {
+      id: '/community'
+      path: '/community'
+      fullPath: '/community'
+      preLoaderRoute: typeof CommunityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/biometrics': {
@@ -399,10 +459,12 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BacktesterRoute: BacktesterRoute,
   BiometricsRoute: BiometricsRoute,
+  CommunityRoute: CommunityRoute,
   DashboardRoute: DashboardRoute,
   DematRoute: DematRoute,
   ForecastRoute: ForecastRoute,
   FundsRoute: FundsRoute,
+  GoalsRoute: GoalsRoute,
   NewsRoute: NewsRoute,
   OptimizerRoute: OptimizerRoute,
   PitchRoute: PitchRoute,
@@ -413,18 +475,9 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   ShadowRoute: ShadowRoute,
   SipRoute: SipRoute,
+  TaxRoute: TaxRoute,
   WatchlistRoute: WatchlistRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

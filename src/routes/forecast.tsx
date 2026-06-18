@@ -1,12 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info, Settings2 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, BarChart, Bar as RBar } from "recharts";
 import { buildFeatures } from "@/lib/forecast/features";
 import { runSelected, MODEL_SPECS, type ModelResult, type ModelSpec } from "@/lib/forecast/models";
 import { computeConsensus, type Consensus } from "@/lib/forecast/consensus";
-import { loadStock, loadFundNav, loadMfList, type MfScheme } from "@/lib/forecast/data";
+import { loadStock, loadFundNav } from "@/lib/forecast/data";
 import type { Bar as PriceBar } from "@/lib/forecast/features";
+import { StockCombobox, FundCombobox } from "@/components/AssetCombobox";
+import { NIFTY500, type NiftyStock } from "@/lib/nifty500";
+import { FUND_UNIVERSE, FUND_CATEGORY_LABELS, type CuratedFund } from "@/lib/fundUniverse";
 
 export const Route = createFileRoute("/forecast")({
   head: () => ({
@@ -93,8 +96,12 @@ function ForecastPage() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"price" | "perf" | "mc" | "ind">("price");
 
-  const [mfList, setMfList] = useState<MfScheme[]>([]);
-  const [mfSearch, setMfSearch] = useState("");
+  const [pickedStock, setPickedStock] = useState<NiftyStock | null>(() => NIFTY500.find((s) => s.symbol === "RELIANCE") ?? null);
+  const [pickedFund, setPickedFund] = useState<CuratedFund | null>(null);
+  const [uiMode, setUiMode] = useState<"simple" | "advanced">(() => {
+    try { return (localStorage.getItem("dx_forecast_ui") as "simple" | "advanced") || "simple"; } catch { return "simple"; }
+  });
+  useEffect(() => { try { localStorage.setItem("dx_forecast_ui", uiMode); } catch { /* noop */ } }, [uiMode]);
 
   const applyPreset = (p: "recommended" | "all" | "custom") => {
     setPreset(p);
@@ -159,18 +166,23 @@ function ForecastPage() {
     }
   };
 
-  const openMfPicker = async () => {
-    setMode("fund");
-    if (!mfList.length) {
-      try { setMfList(await loadMfList()); } catch { /* noop */ }
-    }
-  };
+  // sync `query` with picked asset so handleSearch + meta keep working
+  useEffect(() => {
+    if (mode === "stock" && pickedStock) setQuery(pickedStock.symbol);
+    else if (mode === "fund" && pickedFund) setQuery(String(pickedFund.code));
+  }, [mode, pickedStock, pickedFund]);
 
-  const filteredMf = useMemo(() => {
-    if (!mfSearch.trim()) return mfList.slice(0, 30);
-    const q = mfSearch.toLowerCase();
-    return mfList.filter((s) => s.schemeName.toLowerCase().includes(q)).slice(0, 30);
-  }, [mfList, mfSearch]);
+  // Simple mode → bundle of curated model ids
+  const SIMPLE_BUNDLES: Record<string, string[]> = {
+    trend: ["arima", "linreg", "ensemble"],
+    pattern: ["lstm", "gru", "prophet"],
+    range: ["mc", "ensemble"],
+  };
+  const applySimpleBundle = (key: keyof typeof SIMPLE_BUNDLES) => {
+    const ids = SIMPLE_BUNDLES[key].filter((id) => MODEL_SPECS.some((m) => m.id === id));
+    setSelected(new Set(ids));
+    setPreset("custom");
+  };
 
   const currentPrice = bars.length ? bars[bars.length - 1].c : 0;
   const consensus: Consensus | null = results.length ? computeConsensus(results, currentPrice) : null;
@@ -274,112 +286,110 @@ function ForecastPage() {
         </p>
       </header>
 
-      {/* Search + horizon + run */}
+      {/* Asset picker — combobox flow */}
       <div className="dx-glass p-4 space-y-3">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setMode("stock")}
-            data-active={mode === "stock"}
-            className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-          >📈 Stock</button>
-          <button
-            onClick={openMfPicker}
-            data-active={mode === "fund"}
-            className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-          >💰 Mutual Fund</button>
-        </div>
-        <div className="flex flex-col md:flex-row gap-2">
-          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded border border-border bg-background/40">
-            <Search className="w-4 h-4 text-muted-foreground" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
-              placeholder={mode === "stock" ? "NSE symbol (RELIANCE, TCS, INFY...)" : "Pick a fund below or paste scheme code"}
-              className="flex-1 bg-transparent outline-none text-sm font-mono"
-            />
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => setMode("stock")} data-active={mode === "stock"}
+            className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">📈 Stock</button>
+          <button onClick={() => setMode("fund")} data-active={mode === "fund"}
+            className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">💰 Mutual Fund</button>
+          <div className="ml-auto flex gap-1 items-center">
+            <span className="text-[10px] text-muted-foreground">Mode</span>
+            {(["simple", "advanced"] as const).map((m) => (
+              <button key={m} onClick={() => setUiMode(m)} data-active={uiMode === m}
+                className="px-2 py-1 text-[11px] rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground capitalize">{m}</button>
+            ))}
           </div>
+        </div>
+
+        {mode === "stock"
+          ? <StockCombobox value={pickedStock} onChange={(s) => { setPickedStock(s); setQuery(s.symbol); }} />
+          : <FundCombobox value={pickedFund} onChange={(f) => { setPickedFund(f); setQuery(String(f.code)); }} />}
+
+        {/* Asset context card */}
+        {mode === "stock" && pickedStock && (
+          <div className="rounded border border-border bg-background/30 p-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div><div className="text-[10px] uppercase text-muted-foreground">Symbol</div><div className="font-mono font-semibold">{pickedStock.symbol}</div></div>
+            <div><div className="text-[10px] uppercase text-muted-foreground">Sector</div><div>{pickedStock.sector}</div></div>
+            <div className="col-span-2 sm:col-span-2"><div className="text-[10px] uppercase text-muted-foreground">Company</div><div className="truncate">{pickedStock.name}</div></div>
+          </div>
+        )}
+        {mode === "fund" && pickedFund && (
+          <div className="rounded border border-border bg-background/30 p-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+            <div className="col-span-2"><div className="text-[10px] uppercase text-muted-foreground">Fund</div><div className="truncate">{pickedFund.name}</div></div>
+            <div><div className="text-[10px] uppercase text-muted-foreground">House</div><div>{pickedFund.house}</div></div>
+            <div className="col-span-2 sm:col-span-3"><div className="text-[10px] uppercase text-muted-foreground">Category</div><div>{FUND_CATEGORY_LABELS[pickedFund.category] || pickedFund.category}</div></div>
+          </div>
+        )}
+
+        <div className="flex flex-col md:flex-row gap-2 flex-wrap items-stretch">
           <div className="flex gap-1 flex-wrap">
             {HORIZONS.map((h) => (
               <button key={h} onClick={() => { setHorizon(h); setCustomHorizon(""); }} data-active={horizon === h && !customHorizon}
-                className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">
-                {h}d
-              </button>
+                className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">{h}d</button>
             ))}
           </div>
           <button
             onClick={handleSearch}
-            disabled={loading || !query}
-            className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
+            disabled={loading || !query || (mode === "stock" ? !pickedStock : !pickedFund)}
+            className="ml-auto px-4 py-2 rounded bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {loading ? `Running ${progress.done}/${progress.total}…` : `Run ${selected.size} model${selected.size === 1 ? "" : "s"}`}
+            {loading ? `Running ${progress.done}/${progress.total}…` : !query ? "Select a stock or fund to begin" : `Run ${selected.size} model${selected.size === 1 ? "" : "s"}`}
           </button>
         </div>
 
-        {mode === "fund" && mfList.length > 0 && (
-          <div className="rounded border border-border bg-background/30 max-h-56 overflow-auto">
-            <input
-              value={mfSearch} onChange={(e) => setMfSearch(e.target.value)}
-              placeholder="Filter funds by name..."
-              className="w-full px-3 py-2 bg-transparent border-b border-border outline-none text-sm"
-            />
-            <ul className="text-xs">
-              {filteredMf.map((s) => (
-                <li key={s.schemeCode}>
-                  <button onClick={() => setQuery(String(s.schemeCode))}
-                    className="w-full text-left px-3 py-1.5 hover:bg-card/60 font-mono truncate">
-                    {s.schemeCode} — {s.schemeName}
-                  </button>
-                </li>
-              ))}
-            </ul>
+        {/* Simple mode bundles */}
+        {uiMode === "simple" && (
+          <div className="grid sm:grid-cols-3 gap-2 pt-1">
+            <BundleCard emoji="📈" title="Trend" desc="Detects direction with ARIMA + Linear Regression + Ensemble." onClick={() => applySimpleBundle("trend")} />
+            <BundleCard emoji="🔄" title="Pattern Recognition" desc="Neural nets (LSTM + GRU) plus Prophet for seasonality." onClick={() => applySimpleBundle("pattern")} />
+            <BundleCard emoji="🎲" title="Range of Outcomes" desc="Monte Carlo simulation + ensemble — best/worst-case bands." onClick={() => applySimpleBundle("range")} />
           </div>
         )}
 
-        {/* Preset chips */}
-        <div className="flex gap-2 flex-wrap items-center">
-          <span className="text-xs text-muted-foreground">Preset:</span>
-          {(["recommended", "all", "custom"] as const).map((p) => (
-            <button key={p} onClick={() => applyPreset(p)} data-active={preset === p}
-              className="px-3 py-1 text-xs rounded-full border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground capitalize">
-              {p === "all" ? "All 17" : p}
-            </button>
-          ))}
-          <span className="ml-auto text-[11px] text-muted-foreground font-mono">{selected.size} / {MODEL_SPECS.length} selected</span>
-        </div>
-
-        {/* Model picker grouped */}
-        <div className="space-y-2">
-          {GROUPS.map((g) => {
-            const models = MODEL_SPECS.filter((m) => m.groupLabel === g);
-            return (
-              <div key={g}>
-                <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">{g}</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {models.map((m) => {
-                    const on = selected.has(m.id);
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => toggleModel(m.id)}
-                        title={m.tooltip}
-                        className="px-2.5 py-1 text-xs rounded border font-mono"
-                        style={{
-                          borderColor: on ? colorFor(m.id) : "rgba(255,255,255,0.1)",
-                          background: on ? `${colorFor(m.id)}20` : "transparent",
-                          color: on ? colorFor(m.id) : "#94a3b8",
-                        }}
-                      >
-                        {m.name}
-                      </button>
-                    );
-                  })}
+        {/* Preset chips — only visible in advanced mode */}
+        {uiMode === "advanced" && (
+          <div className="flex gap-2 flex-wrap items-center">
+            <span className="text-xs text-muted-foreground flex items-center gap-1"><Settings2 className="h-3 w-3" /> Preset:</span>
+            {(["recommended", "all", "custom"] as const).map((p) => (
+              <button key={p} onClick={() => applyPreset(p)} data-active={preset === p}
+                className="px-3 py-1 text-xs rounded-full border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground capitalize">
+                {p === "all" ? "All 17" : p}
+              </button>
+            ))}
+            <span className="ml-auto text-[11px] text-muted-foreground font-mono">{selected.size} / {MODEL_SPECS.length} selected</span>
+          </div>
+        )}
+        {/* Model picker grouped — Advanced only */}
+        {uiMode === "advanced" && (
+          <div className="space-y-2">
+            {GROUPS.map((g) => {
+              const models = MODEL_SPECS.filter((m) => m.groupLabel === g);
+              return (
+                <div key={g}>
+                  <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">{g}</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {models.map((m) => {
+                      const on = selected.has(m.id);
+                      return (
+                        <button key={m.id} onClick={() => toggleModel(m.id)} title={m.tooltip}
+                          className="px-2.5 py-1 text-xs rounded border font-mono"
+                          style={{
+                            borderColor: on ? colorFor(m.id) : "rgba(255,255,255,0.1)",
+                            background: on ? `${colorFor(m.id)}20` : "transparent",
+                            color: on ? colorFor(m.id) : "#94a3b8",
+                          }}>
+                          {m.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Advanced settings */}
         <button
@@ -594,6 +604,17 @@ function ForecastPage() {
         </div>
       )}
 
+      {/* Plain-language summary */}
+      {results.length > 0 && consensus && agreement && (
+        <div className="dx-glass p-4">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">In plain English</div>
+          <p className="text-sm leading-relaxed">
+            Based on the {results.length} model{results.length === 1 ? "" : "s"} you ran, <span className="font-semibold">{meta.name}</span> is projected to move <span className="font-mono font-semibold" style={{ color: consensus.score >= 0 ? "#00ff88" : "#ff4466" }}>{consensus.score >= 0 ? "+" : ""}{consensus.score.toFixed(2)}%</span> over the next {effectiveHorizon} days.{" "}
+            <span className="font-mono">{agreement.majority} of {agreement.total}</span> models agree on a <span className="font-semibold">{agreement.direction}</span> direction; confidence is <span className="font-semibold">{consensus.confidence >= 70 ? "high" : consensus.confidence >= 45 ? "moderate" : "low"}</span> based on model agreement.
+          </p>
+        </div>
+      )}
+
       <p className="text-xs text-muted-foreground italic border-t border-border pt-3">
         Dexter's algorithmic signal is for informational purposes only. Not SEBI-registered investment
         advice. Past model accuracy does not guarantee future performance. Always consult a SEBI-registered
@@ -656,5 +677,15 @@ function Gauge({ label, value, max, signed, suffix }: { label: string; value: nu
       <div className="text-xl font-mono">{v.toFixed(2)}{suffix || ""}</div>
       <div className="h-1.5 bg-muted rounded mt-2"><div className="h-full rounded" style={{ width: `${pct}%`, background: color }} /></div>
     </div>
+  );
+}
+
+function BundleCard({ emoji, title, desc, onClick }: { emoji: string; title: string; desc: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="text-left rounded-lg border border-border bg-background/40 hover:bg-card/60 hover:border-primary/40 transition p-3">
+      <div className="text-2xl">{emoji}</div>
+      <div className="font-semibold text-sm mt-1">{title}</div>
+      <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{desc}</div>
+    </button>
   );
 }
