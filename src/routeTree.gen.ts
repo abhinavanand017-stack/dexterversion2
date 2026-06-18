@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WatchlistRouteImport } from './routes/watchlist'
+import { Route as TaxRouteImport } from './routes/tax'
 import { Route as SipRouteImport } from './routes/sip'
 import { Route as ShadowRouteImport } from './routes/shadow'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -32,6 +33,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const WatchlistRoute = WatchlistRouteImport.update({
   id: '/watchlist',
   path: '/watchlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TaxRoute = TaxRouteImport.update({
+  id: '/tax',
+  path: '/tax',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SipRoute = SipRouteImport.update({
@@ -144,6 +150,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/shadow': typeof ShadowRoute
   '/sip': typeof SipRoute
+  '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
 }
 export interface FileRoutesByTo {
@@ -165,6 +172,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/shadow': typeof ShadowRoute
   '/sip': typeof SipRoute
+  '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
 }
 export interface FileRoutesById {
@@ -187,6 +195,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/shadow': typeof ShadowRoute
   '/sip': typeof SipRoute
+  '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
 }
 export interface FileRouteTypes {
@@ -210,6 +219,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/shadow'
     | '/sip'
+    | '/tax'
     | '/watchlist'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -231,6 +241,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/shadow'
     | '/sip'
+    | '/tax'
     | '/watchlist'
   id:
     | '__root__'
@@ -252,6 +263,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/shadow'
     | '/sip'
+    | '/tax'
     | '/watchlist'
   fileRoutesById: FileRoutesById
 }
@@ -274,6 +286,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   ShadowRoute: typeof ShadowRoute
   SipRoute: typeof SipRoute
+  TaxRoute: typeof TaxRoute
   WatchlistRoute: typeof WatchlistRoute
 }
 
@@ -284,6 +297,13 @@ declare module '@tanstack/react-router' {
       path: '/watchlist'
       fullPath: '/watchlist'
       preLoaderRoute: typeof WatchlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tax': {
+      id: '/tax'
+      path: '/tax'
+      fullPath: '/tax'
+      preLoaderRoute: typeof TaxRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sip': {
@@ -434,6 +454,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   ShadowRoute: ShadowRoute,
   SipRoute: SipRoute,
+  TaxRoute: TaxRoute,
   WatchlistRoute: WatchlistRoute,
 }
 export const routeTree = rootRouteImport
