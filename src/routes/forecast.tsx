@@ -361,45 +361,35 @@ function ForecastPage() {
             <span className="ml-auto text-[11px] text-muted-foreground font-mono">{selected.size} / {MODEL_SPECS.length} selected</span>
           </div>
         )}
-            <button key={p} onClick={() => applyPreset(p)} data-active={preset === p}
-              className="px-3 py-1 text-xs rounded-full border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground capitalize">
-              {p === "all" ? "All 17" : p}
-            </button>
-          ))}
-          <span className="ml-auto text-[11px] text-muted-foreground font-mono">{selected.size} / {MODEL_SPECS.length} selected</span>
-        </div>
-
-        {/* Model picker grouped */}
-        <div className="space-y-2">
-          {GROUPS.map((g) => {
-            const models = MODEL_SPECS.filter((m) => m.groupLabel === g);
-            return (
-              <div key={g}>
-                <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">{g}</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {models.map((m) => {
-                    const on = selected.has(m.id);
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => toggleModel(m.id)}
-                        title={m.tooltip}
-                        className="px-2.5 py-1 text-xs rounded border font-mono"
-                        style={{
-                          borderColor: on ? colorFor(m.id) : "rgba(255,255,255,0.1)",
-                          background: on ? `${colorFor(m.id)}20` : "transparent",
-                          color: on ? colorFor(m.id) : "#94a3b8",
-                        }}
-                      >
-                        {m.name}
-                      </button>
-                    );
-                  })}
+        {/* Model picker grouped — Advanced only */}
+        {uiMode === "advanced" && (
+          <div className="space-y-2">
+            {GROUPS.map((g) => {
+              const models = MODEL_SPECS.filter((m) => m.groupLabel === g);
+              return (
+                <div key={g}>
+                  <div className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground mb-1">{g}</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {models.map((m) => {
+                      const on = selected.has(m.id);
+                      return (
+                        <button key={m.id} onClick={() => toggleModel(m.id)} title={m.tooltip}
+                          className="px-2.5 py-1 text-xs rounded border font-mono"
+                          style={{
+                            borderColor: on ? colorFor(m.id) : "rgba(255,255,255,0.1)",
+                            background: on ? `${colorFor(m.id)}20` : "transparent",
+                            color: on ? colorFor(m.id) : "#94a3b8",
+                          }}>
+                          {m.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Advanced settings */}
         <button
