@@ -1,19 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { FUND_CATEGORIES, fetchFund, type CategoryKey, type PeriodKey, type FundRow } from "@/lib/funds";
-import { ExternalLink, X, Filter } from "lucide-react";
+import { ExternalLink, X, Filter, AlertTriangle, RefreshCw } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { FUND_UNIVERSE, FUND_CATEGORY_LABELS, type CuratedFund } from "@/lib/fundUniverse";
+import { FundCombobox } from "@/components/AssetCombobox";
 
 export const Route = createFileRoute("/funds")({
   head: () => ({
     meta: [
       { title: "Fund Screener — DEXTER" },
-      { name: "description", content: "Indian mutual fund research hub. Category returns heatmap, advanced filters, NAV history charts, SIP calculator." },
+      { name: "description", content: "Indian mutual fund research hub. Category returns heatmap, advanced filters, live NAV history, SIP calculator." },
     ],
   }),
   component: FundsPage,
 });
 
+type PeriodKey = "1y" | "3y" | "5y" | "10y";
 const PERIODS: { key: PeriodKey; years: number; label: string }[] = [
   { key: "1y", years: 1, label: "1Y" },
   { key: "3y", years: 3, label: "3Y" },
@@ -23,6 +25,58 @@ const PERIODS: { key: PeriodKey; years: number; label: string }[] = [
 
 const HEATMAP_PERIODS = ["1W", "1M", "3M", "6M", "1Y", "3Y", "5Y"];
 
+interface FundRow {
+  code: number;
+  name: string;
+  house: string;
+  category: string;
+  nav: number;
+  navDate: string;
+  returnPct: number | null;
+}
+
+interface MfapiResponse {
+  meta?: { scheme_name?: string; fund_house?: string };
+  data?: Array<{ date: string; nav: string }>;
+}
+
+function parseDate(d: string): number {
+  const [day, month, year] = d.split("-").map(Number);
+  return new Date(year, month - 1, day).getTime();
+}
+function calcCAGR(history: Array<{ date: string; nav: string }>, years: number): number | null {
+  if (!history.length) return null;
+  const latest = parseFloat(history[0].nav);
+  const latestTs = parseDate(history[0].date);
+  const targetTs = latestTs - years * 365 * 86400000;
+  const past = history.find((d) => parseDate(d.date) <= targetTs);
+  if (!past) return null;
+  const pastNav = parseFloat(past.nav);
+  if (!pastNav) return null;
+  return ((Math.pow(latest / pastNav, 1 / years) - 1) * 100);
+}
+
+async function fetchFund(f: CuratedFund, years: number, signal: AbortSignal): Promise<FundRow | null> {
+  try {
+    const res = await fetch(`https://api.mfapi.in/mf/${f.code}`, { signal });
+    if (!res.ok) return null;
+    const json = (await res.json()) as MfapiResponse;
+    if (!json.data?.length) return null;
+    const latest = json.data[0];
+    return {
+      code: f.code,
+      name: json.meta?.scheme_name ?? f.name,
+      house: json.meta?.fund_house ?? f.house,
+      category: f.category,
+      nav: parseFloat(latest.nav),
+      navDate: latest.date,
+      returnPct: calcCAGR(json.data, years),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function returnColor(pct: number): string {
   if (pct < -5) return "#7f1d1d";
   if (pct < 0) return "#dc2626";
@@ -31,37 +85,52 @@ function returnColor(pct: number): string {
   if (pct < 20) return "#22c55e";
   return "#16a34a";
 }
-
 function dexterFundScore(r: FundRow): number {
   if (r.returnPct === null) return 0;
   return Math.max(0, Math.min(100, Math.round(50 + r.returnPct * 2)));
 }
 
 function FundsPage() {
-  const [category, setCategory] = useState<CategoryKey>("largecap");
+  // Default category — large cap is the broadest stable bucket.
+  const [category, setCategory] = useState<string>("largecap");
   const [period, setPeriod] = useState<PeriodKey>("3y");
   const [rows, setRows] = useState<FundRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [minReturn, setMinReturn] = useState(0);
+  const [minReturn, setMinReturn] = useState(-100);
   const [minRating, setMinRating] = useState(0);
   const [selected, setSelected] = useState<FundRow | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const [picked, setPicked] = useState<CuratedFund | null>(null);
+
+  const categories = useMemo(() => {
+    const set = new Set(FUND_UNIVERSE.map((f) => f.category));
+    return Array.from(set);
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setRows([]);
+    const ctrl = new AbortController();
+    setLoading(true); setError(null); setRows([]);
     const years = PERIODS.find((p) => p.key === period)!.years;
-    const cat = FUND_CATEGORIES[category];
-    Promise.all(cat.funds.map((f) => fetchFund(f.code, years, f.house))).then((res) => {
-      if (cancelled) return;
+    const subset = FUND_UNIVERSE.filter((f) => f.category === category).slice(0, 24);
+    if (subset.length === 0) { setLoading(false); return; }
+    Promise.all(subset.map((f) => fetchFund(f, years, ctrl.signal))).then((res) => {
+      if (ctrl.signal.aborted) return;
       const valid = res.filter((r): r is FundRow => r !== null);
+      if (valid.length === 0) {
+        setError("Couldn't reach the mutual-fund data service. Tap retry below to try again.");
+      }
       valid.sort((a, b) => (b.returnPct ?? -Infinity) - (a.returnPct ?? -Infinity));
       setRows(valid);
       setLoading(false);
+    }).catch(() => {
+      if (ctrl.signal.aborted) return;
+      setError("Network error while loading funds.");
+      setLoading(false);
     });
-    return () => { cancelled = true; };
-  }, [category, period]);
+    return () => ctrl.abort();
+  }, [category, period, retryNonce]);
 
   const filtered = useMemo(() => {
     const Q = search.toLowerCase();
@@ -74,21 +143,17 @@ function FundsPage() {
     });
   }, [rows, search, minReturn, minRating]);
 
-  // Synthetic heatmap data — modelled after Value Research
+  // Synthetic heatmap (representative — real per-period returns require multiple API calls)
   const heatmapData = useMemo(() => {
-    const cats = Object.keys(FUND_CATEGORIES) as CategoryKey[];
-    return cats.map((c) => {
-      const seed = c.charCodeAt(0);
+    return categories.slice(0, 14).map((c) => {
+      let seed = 0; for (const ch of c) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
       return {
         key: c,
-        label: FUND_CATEGORIES[c].label,
-        cells: HEATMAP_PERIODS.map((_, i) => {
-          const base = Math.sin(seed + i * 0.7) * 8 + (i > 3 ? 12 : 2);
-          return Number(base.toFixed(1));
-        }),
+        label: FUND_CATEGORY_LABELS[c] || c,
+        cells: HEATMAP_PERIODS.map((_, i) => Number((Math.sin(seed + i * 0.7) * 8 + (i > 3 ? 12 : 2)).toFixed(1))),
       };
     });
-  }, []);
+  }, [categories]);
 
   return (
     <div className="dx-fade-in space-y-5 pb-20">
@@ -98,6 +163,11 @@ function FundsPage() {
           Live NAV from mfapi.in <span className="dx-engine-dot" /> Modelled after Value Research / Morningstar / ET Money
         </p>
       </header>
+
+      {/* Searchable fund picker */}
+      <div className="dx-glass p-3">
+        <FundCombobox value={picked} onChange={(f) => { setPicked(f); setCategory(f.category); setSelected({ code: f.code, name: f.name, house: f.house, category: f.category, nav: 0, navDate: "", returnPct: null }); }} />
+      </div>
 
       {/* Heatmap */}
       <section className="dx-glass rounded-xl p-4">
@@ -116,7 +186,7 @@ function FundsPage() {
                   <td className="px-2 py-1 sticky left-0 bg-card/80 font-medium">{row.label}</td>
                   {row.cells.map((v, i) => (
                     <td key={i} className="px-2 py-1 text-center cursor-pointer transition hover:scale-105" style={{ background: returnColor(v), color: "white" }}
-                      onClick={() => { setCategory(row.key as CategoryKey); setPeriod((["1y", "1y", "1y", "1y", "1y", "3y", "5y"][i]) as PeriodKey); }}>
+                      onClick={() => { setCategory(row.key); setPeriod(i > 5 ? "5y" : i > 4 ? "3y" : "1y"); }}>
                       <span className="font-mono">{v >= 0 ? "+" : ""}{v.toFixed(1)}%</span>
                     </td>
                   ))}
@@ -125,7 +195,7 @@ function FundsPage() {
             </tbody>
           </table>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-2">Data modelled after Value Research Online (valueresearchonline.com). Click any cell to filter.</p>
+        <p className="text-[10px] text-muted-foreground mt-2">Heatmap values are indicative. Click any cell to filter the table below.</p>
       </section>
 
       <div className="grid md:grid-cols-[240px_1fr] gap-4">
@@ -134,10 +204,10 @@ function FundsPage() {
           <div className="text-xs uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Filter className="h-3 w-3" /> Filters</div>
           <div>
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Category</div>
-            <div className="flex flex-wrap gap-1">
-              {(Object.keys(FUND_CATEGORIES) as CategoryKey[]).map((k) => (
+            <div className="flex flex-wrap gap-1 max-h-40 overflow-y-auto">
+              {categories.map((k) => (
                 <button key={k} onClick={() => setCategory(k)} className={"px-2 py-0.5 rounded-full border text-[10px] " + (category === k ? "bg-primary text-primary-foreground border-primary" : "border-border bg-card/40 hover:bg-card")}>
-                  {FUND_CATEGORIES[k].label}
+                  {FUND_CATEGORY_LABELS[k] || k}
                 </button>
               ))}
             </div>
@@ -168,13 +238,12 @@ function FundsPage() {
               ))}
             </div>
           </div>
-          {/* Presets */}
           <div className="pt-2 border-t border-border space-y-1">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Preset Screens</div>
             <button onClick={() => { setMinReturn(18); setMinRating(4); }} className="w-full text-left text-xs px-2 py-1 rounded hover:bg-primary/10">🏆 Top Performers</button>
-            <button onClick={() => { setCategory("debt"); setMinReturn(5); }} className="w-full text-left text-xs px-2 py-1 rounded hover:bg-primary/10">🛡️ Low Risk, Steady</button>
+            <button onClick={() => { setCategory("liquid"); setMinReturn(5); }} className="w-full text-left text-xs px-2 py-1 rounded hover:bg-primary/10">🛡️ Low Risk, Steady</button>
             <button onClick={() => { setMinReturn(15); setMinRating(4); }} className="w-full text-left text-xs px-2 py-1 rounded hover:bg-primary/10">🧠 Dexter Picks</button>
-            <button onClick={() => { setSearch(""); setMinReturn(0); setMinRating(0); }} className="w-full text-left text-xs px-2 py-1 rounded text-muted-foreground">Reset Filters</button>
+            <button onClick={() => { setSearch(""); setMinReturn(-100); setMinRating(0); }} className="w-full text-left text-xs px-2 py-1 rounded text-muted-foreground">Reset Filters</button>
           </div>
         </aside>
 
@@ -198,15 +267,24 @@ function FundsPage() {
                     <td colSpan={6} className="px-3 py-3"><div className="h-3 dx-shimmer rounded" /></td>
                   </tr>
                 ))}
-                {!loading && filtered.length === 0 && (
+                {!loading && error && (
+                  <tr><td colSpan={6} className="text-center py-12">
+                    <div className="inline-flex flex-col items-center gap-2 text-xs text-amber-300">
+                      <AlertTriangle className="h-5 w-5" />
+                      <span>{error}</span>
+                      <button onClick={() => setRetryNonce((n) => n + 1)} className="dx-pill cursor-pointer mt-1"><RefreshCw className="h-3 w-3" /> Retry</button>
+                    </div>
+                  </td></tr>
+                )}
+                {!loading && !error && filtered.length === 0 && (
                   <tr><td colSpan={6} className="text-center text-muted-foreground py-12 text-sm">No funds match your criteria.</td></tr>
                 )}
-                {!loading && filtered.map((r, i) => {
+                {!loading && !error && filtered.map((r, i) => {
                   const pct = r.returnPct;
                   const stars = Math.max(1, Math.min(5, Math.round(((pct ?? 0) + 10) / 8)));
                   const score = dexterFundScore(r);
                   return (
-                    <tr key={r.code} className="border-t border-border hover:bg-primary/[0.06] cursor-pointer" onClick={() => setSelected(r)}>
+                    <tr key={r.code + "-" + i} className="border-t border-border hover:bg-primary/[0.06] cursor-pointer" onClick={() => setSelected(r)}>
                       <td className="px-3 py-3 text-muted-foreground font-mono text-xs">{i + 1}</td>
                       <td className="px-3 py-3"><div className="font-medium text-sm">{r.name}</div><div className="text-[10px] text-muted-foreground">{r.house}</div></td>
                       <td className="px-2 py-3 text-right font-mono">₹{r.nav.toFixed(2)}</td>
@@ -235,19 +313,25 @@ function FundsPage() {
 function FundDrawer({ fund, onClose }: { fund: FundRow; onClose: () => void }) {
   const [history, setHistory] = useState<Array<{ d: string; nav: number }>>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [sip, setSip] = useState(5000);
   const [years, setYears] = useState(10);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch(`https://api.mfapi.in/mf/${fund.code}`).then((r) => r.json()).then((j: { data?: Array<{ date: string; nav: string }> }) => {
-      if (cancelled) return;
-      const data = (j.data ?? []).slice(0, 365).reverse().map((d) => ({ d: d.date, nav: parseFloat(d.nav) }));
-      setHistory(data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-    return () => { cancelled = true; };
-  }, [fund.code]);
+    const ctrl = new AbortController();
+    setLoading(true); setError(false);
+    fetch(`https://api.mfapi.in/mf/${fund.code}`, { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then((j: { data?: Array<{ date: string; nav: string }> }) => {
+        const data = (j.data ?? []).slice(0, 365).reverse().map((d) => ({ d: d.date, nav: parseFloat(d.nav) }));
+        if (data.length === 0) setError(true);
+        setHistory(data);
+        setLoading(false);
+      })
+      .catch(() => { if (!ctrl.signal.aborted) { setError(true); setLoading(false); } });
+    return () => ctrl.abort();
+  }, [fund.code, retry]);
 
   const cagr = fund.returnPct ?? 12;
   const months = years * 12;
@@ -257,18 +341,18 @@ function FundDrawer({ fund, onClose }: { fund: FundRow; onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[170] bg-black/70 backdrop-blur-sm flex justify-end" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-full md:w-[70%] max-w-3xl h-full bg-card border-l border-border overflow-y-auto animate-slide-in-right">
+      <div onClick={(e) => e.stopPropagation()} className="w-full md:w-[70%] max-w-3xl h-full bg-card border-l border-border overflow-y-auto">
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 p-4 border-b border-border bg-card/95 backdrop-blur">
           <div>
             <h2 className="font-semibold">{fund.name}</h2>
-            <div className="text-xs text-muted-foreground">{fund.house} · NAV ₹{fund.nav.toFixed(2)} · {fund.navDate}</div>
+            <div className="text-xs text-muted-foreground">{fund.house}{fund.nav ? ` · NAV ₹${fund.nav.toFixed(2)} · ${fund.navDate}` : ""}</div>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
         </div>
 
         <div className="p-4 space-y-5">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <Mini label="Latest NAV" value={`₹${fund.nav.toFixed(2)}`} />
+            <Mini label="Latest NAV" value={fund.nav ? `₹${fund.nav.toFixed(2)}` : "—"} />
             <Mini label="CAGR" value={fund.returnPct ? `${fund.returnPct.toFixed(1)}%` : "—"} color={(fund.returnPct ?? 0) >= 0 ? "var(--bull)" : "var(--bear)"} />
             <Mini label="Dexter Score" value={String(dexterFundScore(fund))} color="var(--primary)" />
             <Mini label="Risk-o-meter" value="Mod-High" />
@@ -277,16 +361,20 @@ function FundDrawer({ fund, onClose }: { fund: FundRow; onClose: () => void }) {
           <section>
             <div className="text-xs uppercase tracking-wider text-muted-foreground mb-2">NAV History (1Y)</div>
             <div className="dx-glass rounded-lg p-3">
-              {loading ? <div className="h-[220px] dx-shimmer rounded" /> : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={history}>
-                    <XAxis dataKey="d" hide />
-                    <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-                    <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: 11 }} />
-                    <Line type="monotone" dataKey="nav" stroke="var(--cyan)" dot={false} strokeWidth={2} />
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
+              {loading
+                ? <div className="h-[220px] dx-shimmer rounded" />
+                : error
+                  ? <div className="h-[220px] flex flex-col items-center justify-center gap-2 text-xs text-amber-300"><AlertTriangle className="h-4 w-4" />Failed to load history.<button onClick={() => setRetry((n) => n + 1)} className="dx-pill cursor-pointer"><RefreshCw className="h-3 w-3" /> Retry</button></div>
+                  : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={history}>
+                      <XAxis dataKey="d" hide />
+                      <YAxis domain={["auto", "auto"]} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+                      <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: 11 }} />
+                      <Line type="monotone" dataKey="nav" stroke="var(--cyan)" dot={false} strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
             </div>
           </section>
 
@@ -306,7 +394,7 @@ function FundDrawer({ fund, onClose }: { fund: FundRow; onClose: () => void }) {
                 <Mini label="Returns" value={`₹${((corpus - invested) / 100000).toFixed(1)}L`} color="var(--bull)" />
                 <Mini label="Corpus" value={`₹${(corpus / 100000).toFixed(1)}L`} color="var(--primary)" />
               </div>
-              <p className="text-[10px] text-muted-foreground italic">Returns shown are based on historical NAV. Mutual fund investments are subject to market risk.</p>
+              <p className="text-[10px] text-muted-foreground italic">Returns shown are based on historical CAGR. Mutual fund investments are subject to market risk.</p>
             </div>
           </section>
 
