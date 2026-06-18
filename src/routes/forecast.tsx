@@ -1,12 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info, Settings2 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, BarChart, Bar as RBar } from "recharts";
 import { buildFeatures } from "@/lib/forecast/features";
 import { runSelected, MODEL_SPECS, type ModelResult, type ModelSpec } from "@/lib/forecast/models";
 import { computeConsensus, type Consensus } from "@/lib/forecast/consensus";
-import { loadStock, loadFundNav, loadMfList, type MfScheme } from "@/lib/forecast/data";
+import { loadStock, loadFundNav } from "@/lib/forecast/data";
 import type { Bar as PriceBar } from "@/lib/forecast/features";
+import { StockCombobox, FundCombobox } from "@/components/AssetCombobox";
+import { NIFTY500, type NiftyStock } from "@/lib/nifty500";
+import { FUND_UNIVERSE, FUND_CATEGORY_LABELS, type CuratedFund } from "@/lib/fundUniverse";
 
 export const Route = createFileRoute("/forecast")({
   head: () => ({
