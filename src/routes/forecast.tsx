@@ -679,3 +679,13 @@ function Gauge({ label, value, max, signed, suffix }: { label: string; value: nu
     </div>
   );
 }
+
+function BundleCard({ emoji, title, desc, onClick }: { emoji: string; title: string; desc: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="text-left rounded-lg border border-border bg-background/40 hover:bg-card/60 hover:border-primary/40 transition p-3">
+      <div className="text-2xl">{emoji}</div>
+      <div className="font-semibold text-sm mt-1">{title}</div>
+      <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{desc}</div>
+    </button>
+  );
+}
