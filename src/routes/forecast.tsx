@@ -604,6 +604,17 @@ function ForecastPage() {
         </div>
       )}
 
+      {/* Plain-language summary */}
+      {results.length > 0 && consensus && agreement && (
+        <div className="dx-glass p-4">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">In plain English</div>
+          <p className="text-sm leading-relaxed">
+            Based on the {results.length} model{results.length === 1 ? "" : "s"} you ran, <span className="font-semibold">{meta.name}</span> is projected to move <span className="font-mono font-semibold" style={{ color: consensus.score >= 0 ? "#00ff88" : "#ff4466" }}>{consensus.score >= 0 ? "+" : ""}{consensus.score.toFixed(2)}%</span> over the next {effectiveHorizon} days.{" "}
+            <span className="font-mono">{agreement.majority} of {agreement.total}</span> models agree on a <span className="font-semibold">{agreement.direction}</span> direction; confidence is <span className="font-semibold">{consensus.confidence >= 70 ? "high" : consensus.confidence >= 45 ? "moderate" : "low"}</span> based on model agreement.
+          </p>
+        </div>
+      )}
+
       <p className="text-xs text-muted-foreground italic border-t border-border pt-3">
         Dexter's algorithmic signal is for informational purposes only. Not SEBI-registered investment
         advice. Past model accuracy does not guarantee future performance. Always consult a SEBI-registered
