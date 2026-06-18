@@ -26,6 +26,7 @@ import { Route as FundsRouteImport } from './routes/funds'
 import { Route as ForecastRouteImport } from './routes/forecast'
 import { Route as DematRouteImport } from './routes/demat'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as CommunityRouteImport } from './routes/community'
 import { Route as BiometricsRouteImport } from './routes/biometrics'
 import { Route as BacktesterRouteImport } from './routes/backtester'
 import { Route as IndexRouteImport } from './routes/index'
@@ -115,6 +116,11 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CommunityRoute = CommunityRouteImport.update({
+  id: '/community',
+  path: '/community',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BiometricsRoute = BiometricsRouteImport.update({
   id: '/biometrics',
   path: '/biometrics',
@@ -135,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/backtester': typeof BacktesterRoute
   '/biometrics': typeof BiometricsRoute
+  '/community': typeof CommunityRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
   '/forecast': typeof ForecastRoute
@@ -157,6 +164,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/backtester': typeof BacktesterRoute
   '/biometrics': typeof BiometricsRoute
+  '/community': typeof CommunityRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
   '/forecast': typeof ForecastRoute
@@ -180,6 +188,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/backtester': typeof BacktesterRoute
   '/biometrics': typeof BiometricsRoute
+  '/community': typeof CommunityRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
   '/forecast': typeof ForecastRoute
@@ -204,6 +213,7 @@ export interface FileRouteTypes {
     | '/'
     | '/backtester'
     | '/biometrics'
+    | '/community'
     | '/dashboard'
     | '/demat'
     | '/forecast'
@@ -226,6 +236,7 @@ export interface FileRouteTypes {
     | '/'
     | '/backtester'
     | '/biometrics'
+    | '/community'
     | '/dashboard'
     | '/demat'
     | '/forecast'
@@ -248,6 +259,7 @@ export interface FileRouteTypes {
     | '/'
     | '/backtester'
     | '/biometrics'
+    | '/community'
     | '/dashboard'
     | '/demat'
     | '/forecast'
@@ -271,6 +283,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BacktesterRoute: typeof BacktesterRoute
   BiometricsRoute: typeof BiometricsRoute
+  CommunityRoute: typeof CommunityRoute
   DashboardRoute: typeof DashboardRoute
   DematRoute: typeof DematRoute
   ForecastRoute: typeof ForecastRoute
@@ -411,6 +424,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/community': {
+      id: '/community'
+      path: '/community'
+      fullPath: '/community'
+      preLoaderRoute: typeof CommunityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/biometrics': {
       id: '/biometrics'
       path: '/biometrics'
@@ -439,6 +459,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BacktesterRoute: BacktesterRoute,
   BiometricsRoute: BiometricsRoute,
+  CommunityRoute: CommunityRoute,
   DashboardRoute: DashboardRoute,
   DematRoute: DematRoute,
   ForecastRoute: ForecastRoute,
