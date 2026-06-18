@@ -96,8 +96,12 @@ function ForecastPage() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"price" | "perf" | "mc" | "ind">("price");
 
-  const [mfList, setMfList] = useState<MfScheme[]>([]);
-  const [mfSearch, setMfSearch] = useState("");
+  const [pickedStock, setPickedStock] = useState<NiftyStock | null>(() => NIFTY500.find((s) => s.symbol === "RELIANCE") ?? null);
+  const [pickedFund, setPickedFund] = useState<CuratedFund | null>(null);
+  const [uiMode, setUiMode] = useState<"simple" | "advanced">(() => {
+    try { return (localStorage.getItem("dx_forecast_ui") as "simple" | "advanced") || "simple"; } catch { return "simple"; }
+  });
+  useEffect(() => { try { localStorage.setItem("dx_forecast_ui", uiMode); } catch { /* noop */ } }, [uiMode]);
 
   const applyPreset = (p: "recommended" | "all" | "custom") => {
     setPreset(p);
