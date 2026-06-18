@@ -286,73 +286,81 @@ function ForecastPage() {
         </p>
       </header>
 
-      {/* Search + horizon + run */}
+      {/* Asset picker — combobox flow */}
       <div className="dx-glass p-4 space-y-3">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setMode("stock")}
-            data-active={mode === "stock"}
-            className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-          >📈 Stock</button>
-          <button
-            onClick={openMfPicker}
-            data-active={mode === "fund"}
-            className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
-          >💰 Mutual Fund</button>
-        </div>
-        <div className="flex flex-col md:flex-row gap-2">
-          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded border border-border bg-background/40">
-            <Search className="w-4 h-4 text-muted-foreground" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleSearch(); }}
-              placeholder={mode === "stock" ? "NSE symbol (RELIANCE, TCS, INFY...)" : "Pick a fund below or paste scheme code"}
-              className="flex-1 bg-transparent outline-none text-sm font-mono"
-            />
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={() => setMode("stock")} data-active={mode === "stock"}
+            className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">📈 Stock</button>
+          <button onClick={() => setMode("fund")} data-active={mode === "fund"}
+            className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">💰 Mutual Fund</button>
+          <div className="ml-auto flex gap-1 items-center">
+            <span className="text-[10px] text-muted-foreground">Mode</span>
+            {(["simple", "advanced"] as const).map((m) => (
+              <button key={m} onClick={() => setUiMode(m)} data-active={uiMode === m}
+                className="px-2 py-1 text-[11px] rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground capitalize">{m}</button>
+            ))}
           </div>
+        </div>
+
+        {mode === "stock"
+          ? <StockCombobox value={pickedStock} onChange={(s) => { setPickedStock(s); setQuery(s.symbol); }} />
+          : <FundCombobox value={pickedFund} onChange={(f) => { setPickedFund(f); setQuery(String(f.code)); }} />}
+
+        {/* Asset context card */}
+        {mode === "stock" && pickedStock && (
+          <div className="rounded border border-border bg-background/30 p-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div><div className="text-[10px] uppercase text-muted-foreground">Symbol</div><div className="font-mono font-semibold">{pickedStock.symbol}</div></div>
+            <div><div className="text-[10px] uppercase text-muted-foreground">Sector</div><div>{pickedStock.sector}</div></div>
+            <div className="col-span-2 sm:col-span-2"><div className="text-[10px] uppercase text-muted-foreground">Company</div><div className="truncate">{pickedStock.name}</div></div>
+          </div>
+        )}
+        {mode === "fund" && pickedFund && (
+          <div className="rounded border border-border bg-background/30 p-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+            <div className="col-span-2"><div className="text-[10px] uppercase text-muted-foreground">Fund</div><div className="truncate">{pickedFund.name}</div></div>
+            <div><div className="text-[10px] uppercase text-muted-foreground">House</div><div>{pickedFund.house}</div></div>
+            <div className="col-span-2 sm:col-span-3"><div className="text-[10px] uppercase text-muted-foreground">Category</div><div>{FUND_CATEGORY_LABELS[pickedFund.category] || pickedFund.category}</div></div>
+          </div>
+        )}
+
+        <div className="flex flex-col md:flex-row gap-2 flex-wrap items-stretch">
           <div className="flex gap-1 flex-wrap">
             {HORIZONS.map((h) => (
               <button key={h} onClick={() => { setHorizon(h); setCustomHorizon(""); }} data-active={horizon === h && !customHorizon}
-                className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">
-                {h}d
-              </button>
+                className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">{h}d</button>
             ))}
           </div>
           <button
             onClick={handleSearch}
-            disabled={loading || !query}
-            className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
+            disabled={loading || !query || (mode === "stock" ? !pickedStock : !pickedFund)}
+            className="ml-auto px-4 py-2 rounded bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {loading ? `Running ${progress.done}/${progress.total}…` : `Run ${selected.size} model${selected.size === 1 ? "" : "s"}`}
+            {loading ? `Running ${progress.done}/${progress.total}…` : !query ? "Select a stock or fund to begin" : `Run ${selected.size} model${selected.size === 1 ? "" : "s"}`}
           </button>
         </div>
 
-        {mode === "fund" && mfList.length > 0 && (
-          <div className="rounded border border-border bg-background/30 max-h-56 overflow-auto">
-            <input
-              value={mfSearch} onChange={(e) => setMfSearch(e.target.value)}
-              placeholder="Filter funds by name..."
-              className="w-full px-3 py-2 bg-transparent border-b border-border outline-none text-sm"
-            />
-            <ul className="text-xs">
-              {filteredMf.map((s) => (
-                <li key={s.schemeCode}>
-                  <button onClick={() => setQuery(String(s.schemeCode))}
-                    className="w-full text-left px-3 py-1.5 hover:bg-card/60 font-mono truncate">
-                    {s.schemeCode} — {s.schemeName}
-                  </button>
-                </li>
-              ))}
-            </ul>
+        {/* Simple mode bundles */}
+        {uiMode === "simple" && (
+          <div className="grid sm:grid-cols-3 gap-2 pt-1">
+            <BundleCard emoji="📈" title="Trend" desc="Detects direction with ARIMA + Linear Regression + Ensemble." onClick={() => applySimpleBundle("trend")} />
+            <BundleCard emoji="🔄" title="Pattern Recognition" desc="Neural nets (LSTM + GRU) plus Prophet for seasonality." onClick={() => applySimpleBundle("pattern")} />
+            <BundleCard emoji="🎲" title="Range of Outcomes" desc="Monte Carlo simulation + ensemble — best/worst-case bands." onClick={() => applySimpleBundle("range")} />
           </div>
         )}
 
-        {/* Preset chips */}
-        <div className="flex gap-2 flex-wrap items-center">
-          <span className="text-xs text-muted-foreground">Preset:</span>
-          {(["recommended", "all", "custom"] as const).map((p) => (
+        {/* Preset chips — only visible in advanced mode */}
+        {uiMode === "advanced" && (
+          <div className="flex gap-2 flex-wrap items-center">
+            <span className="text-xs text-muted-foreground flex items-center gap-1"><Settings2 className="h-3 w-3" /> Preset:</span>
+            {(["recommended", "all", "custom"] as const).map((p) => (
+              <button key={p} onClick={() => applyPreset(p)} data-active={preset === p}
+                className="px-3 py-1 text-xs rounded-full border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground capitalize">
+                {p === "all" ? "All 17" : p}
+              </button>
+            ))}
+            <span className="ml-auto text-[11px] text-muted-foreground font-mono">{selected.size} / {MODEL_SPECS.length} selected</span>
+          </div>
+        )}
             <button key={p} onClick={() => applyPreset(p)} data-active={preset === p}
               className="px-3 py-1 text-xs rounded-full border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground capitalize">
               {p === "all" ? "All 17" : p}
