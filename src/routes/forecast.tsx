@@ -166,18 +166,23 @@ function ForecastPage() {
     }
   };
 
-  const openMfPicker = async () => {
-    setMode("fund");
-    if (!mfList.length) {
-      try { setMfList(await loadMfList()); } catch { /* noop */ }
-    }
-  };
+  // sync `query` with picked asset so handleSearch + meta keep working
+  useEffect(() => {
+    if (mode === "stock" && pickedStock) setQuery(pickedStock.symbol);
+    else if (mode === "fund" && pickedFund) setQuery(String(pickedFund.code));
+  }, [mode, pickedStock, pickedFund]);
 
-  const filteredMf = useMemo(() => {
-    if (!mfSearch.trim()) return mfList.slice(0, 30);
-    const q = mfSearch.toLowerCase();
-    return mfList.filter((s) => s.schemeName.toLowerCase().includes(q)).slice(0, 30);
-  }, [mfList, mfSearch]);
+  // Simple mode → bundle of curated model ids
+  const SIMPLE_BUNDLES: Record<string, string[]> = {
+    trend: ["arima", "linreg", "ensemble"],
+    pattern: ["lstm", "gru", "prophet"],
+    range: ["mc", "ensemble"],
+  };
+  const applySimpleBundle = (key: keyof typeof SIMPLE_BUNDLES) => {
+    const ids = SIMPLE_BUNDLES[key].filter((id) => MODEL_SPECS.some((m) => m.id === id));
+    setSelected(new Set(ids));
+    setPreset("custom");
+  };
 
   const currentPrice = bars.length ? bars[bars.length - 1].c : 0;
   const consensus: Consensus | null = results.length ? computeConsensus(results, currentPrice) : null;
