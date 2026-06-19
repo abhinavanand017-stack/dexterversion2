@@ -156,16 +156,19 @@ function ScreenerPage() {
   };
 
   const exportCsv = () => {
-    const headers = ["Symbol", "Name", "Sector", "Price", "MarketCap(Cr)", "PE", "PB", "ROE", "DivYield", "D/E", "RevGrowth", "Rating"];
+    const headers = ["Symbol", "Name", "Sector", "Price", "MarketCap(Cr)", "PE", "PB", "ROE", "DivYield", "D/E", "RevGrowth", "Rating", "PriceSource", "ExportedAt"];
+    const stamp = new Date().toISOString();
     const lines = [headers.join(",")];
     filtered.forEach((s) => {
-      lines.push([s.symbol, `"${s.name}"`, s.sector, s.price, s.marketCap, s.pe, s.pb, s.roe, s.dividendYield, s.debtEquity, s.revenueGrowth, s.rating].join(","));
+      const q = quotes[`${s.symbol}.NS`];
+      const src = q?.source ?? "seed";
+      lines.push([s.symbol, `"${s.name}"`, s.sector, s.price, s.marketCap, s.pe, s.pb, s.roe, s.dividendYield, s.debtEquity, s.revenueGrowth, s.rating, src, stamp].join(","));
     });
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "screener.csv"; a.click();
+    const a = document.createElement("a"); a.href = url; a.download = `screener-${stamp.slice(0, 19)}.csv`; a.click();
     URL.revokeObjectURL(url);
-    toast.success("Exported to CSV");
+    toast.success("Exported live data to CSV");
   };
 
   const toggleCompare = (s: Stock) => {
