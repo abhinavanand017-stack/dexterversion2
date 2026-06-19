@@ -589,6 +589,13 @@ function ForecastPage() {
         {error && <div className="text-sm text-red-400 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> {error}</div>}
       </div>
 
+      {/* Long-term forecast panel */}
+      {tier === "long" && longResult && (
+        <LongTermPanel res={longResult} meta={meta} rebase={rebase} confidence={confidenceBand} />
+      )}
+
+
+
       {/* Hero consensus */}
       {consensus && agreement && (
         <div className="dx-glass p-5 grid md:grid-cols-3 gap-4">
