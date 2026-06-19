@@ -1,10 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
-import { STOCK_UNIVERSE, SECTORS, dexterScore, type Stock } from "@/lib/stockUniverse";
+import { STOCK_UNIVERSE, SECTORS, dexterScore, calcRating, type Stock } from "@/lib/stockUniverse";
 import { useWatchlist } from "@/components/WatchlistDrawer";
-import { X, Download, Star, Filter, ExternalLink } from "lucide-react";
+import { useLiveQuotes } from "@/hooks/useLiveQuotes";
+import { LiveBadge } from "@/components/LiveBadge";
+import { X, Download, Star, Filter, ExternalLink, BarChart3, Sparkles } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from "recharts";
 import { toast } from "sonner";
 
@@ -37,11 +39,11 @@ interface Filters {
 const DEFAULT_FILTERS: Filters = {
   sectors: [],
   capMin: 0, capMax: 2_500_000,
-  peMin: 0, peMax: 600,
-  pbMax: 100,
+  peMin: 0, peMax: 100,
+  pbMax: 30,
   roeMin: -20,
   divMin: 0,
-  deMax: 20,
+  deMax: 10,
   growthMin: -20,
   position: "all",
   ratings: [],
@@ -88,6 +90,7 @@ function Sparkline({ symbol, color }: { symbol: string; color: string }) {
 
 function ScreenerPage() {
   const search = Route.useSearch();
+  const navigate = useNavigate();
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [textSearch, setTextSearch] = useState(search.q || "");
   const [sortKey, setSortKey] = useState<keyof Stock>("marketCap");
@@ -98,24 +101,43 @@ function ScreenerPage() {
   const [showFilters, setShowFilters] = useState(true);
   const { add } = useWatchlist();
 
+  // Pre-compute live ratings once per universe so the distribution actually varies.
+  const ratedUniverse = useMemo<Stock[]>(
+    () => STOCK_UNIVERSE.map((s) => ({ ...s, rating: calcRating(s) })),
+    [],
+  );
+
+  // Live prices for the entire universe — server fn batches & caches; safe for ~500 symbols.
+  const allSymbols = useMemo(() => ratedUniverse.map((s) => `${s.symbol}.NS`), [ratedUniverse]);
+  const { quotes, status: liveStatus, fetchedAt } = useLiveQuotes(allSymbols);
+
+  // Merge live prices into the working dataset.
+  const liveUniverse = useMemo<Stock[]>(() => {
+    return ratedUniverse.map((s) => {
+      const q = quotes[`${s.symbol}.NS`];
+      if (!q || !q.price) return s;
+      return { ...s, price: q.price };
+    });
+  }, [ratedUniverse, quotes]);
+
   useEffect(() => {
     if (search.q) {
       setTextSearch(search.q);
-      const s = STOCK_UNIVERSE.find((x) => x.symbol === search.q.toUpperCase());
+      const s = liveUniverse.find((x) => x.symbol === search.q.toUpperCase());
       if (s) setSelected(s);
     }
-  }, [search.q]);
+  }, [search.q, liveUniverse]);
 
   const filtered = useMemo(() => {
     const Q = textSearch.trim().toUpperCase();
-    let rows = STOCK_UNIVERSE.filter((s) => matches(s, filters));
+    let rows = liveUniverse.filter((s) => matches(s, filters));
     if (Q) rows = rows.filter((s) => s.symbol.includes(Q) || s.name.toUpperCase().includes(Q));
     rows.sort((a, b) => {
       const av = a[sortKey] as number; const bv = b[sortKey] as number;
       return sortDir === "asc" ? av - bv : bv - av;
     });
     return rows;
-  }, [filters, textSearch, sortKey, sortDir]);
+  }, [filters, textSearch, sortKey, sortDir, liveUniverse]);
 
   const PAGE_SIZE = 20;
   const pageRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -134,16 +156,19 @@ function ScreenerPage() {
   };
 
   const exportCsv = () => {
-    const headers = ["Symbol", "Name", "Sector", "Price", "MarketCap(Cr)", "PE", "PB", "ROE", "DivYield", "D/E", "RevGrowth", "Rating"];
+    const headers = ["Symbol", "Name", "Sector", "Price", "MarketCap(Cr)", "PE", "PB", "ROE", "DivYield", "D/E", "RevGrowth", "Rating", "PriceSource", "ExportedAt"];
+    const stamp = new Date().toISOString();
     const lines = [headers.join(",")];
     filtered.forEach((s) => {
-      lines.push([s.symbol, `"${s.name}"`, s.sector, s.price, s.marketCap, s.pe, s.pb, s.roe, s.dividendYield, s.debtEquity, s.revenueGrowth, s.rating].join(","));
+      const q = quotes[`${s.symbol}.NS`];
+      const src = q?.source ?? "seed";
+      lines.push([s.symbol, `"${s.name}"`, s.sector, s.price, s.marketCap, s.pe, s.pb, s.roe, s.dividendYield, s.debtEquity, s.revenueGrowth, s.rating, src, stamp].join(","));
     });
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "screener.csv"; a.click();
+    const a = document.createElement("a"); a.href = url; a.download = `screener-${stamp.slice(0, 19)}.csv`; a.click();
     URL.revokeObjectURL(url);
-    toast.success("Exported to CSV");
+    toast.success("Exported live data to CSV");
   };
 
   const toggleCompare = (s: Stock) => {
@@ -162,7 +187,10 @@ function ScreenerPage() {
       <header className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight dx-grad-text">Market Screener</h1>
-          <p className="text-xs text-muted-foreground font-mono">Showing {filtered.length} of {STOCK_UNIVERSE.length} stocks · NSE/BSE</p>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono flex-wrap">
+            <span>Showing {filtered.length} of {STOCK_UNIVERSE.length} stocks · NSE/BSE</span>
+            <LiveBadge status={liveStatus} fetchedAt={fetchedAt} source="Yahoo Finance / Marketstack" />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <input value={textSearch} onChange={(e) => { setTextSearch(e.target.value); setPage(0); }} placeholder="Search by name or symbol…" className="bg-card/60 border border-border rounded px-3 py-1.5 text-sm font-mono w-56 outline-none focus:border-primary" />
@@ -196,11 +224,11 @@ function ScreenerPage() {
                 })}
               </div>
             </div>
-            <RangeFilter label={`P/E ≤ ${filters.peMax}`} min={5} max={600} value={filters.peMax} onChange={(v) => setFilters((f) => ({ ...f, peMax: v }))} />
-            <RangeFilter label={`P/B ≤ ${filters.pbMax.toFixed(1)}`} min={0} max={100} step={0.5} value={filters.pbMax} onChange={(v) => setFilters((f) => ({ ...f, pbMax: v }))} />
+            <RangeFilter label={`P/E ≤ ${filters.peMax}`} min={5} max={100} value={filters.peMax} onChange={(v) => setFilters((f) => ({ ...f, peMax: v }))} />
+            <RangeFilter label={`P/B ≤ ${filters.pbMax.toFixed(1)}`} min={0} max={30} step={0.5} value={filters.pbMax} onChange={(v) => setFilters((f) => ({ ...f, pbMax: v }))} />
             <RangeFilter label={`ROE ≥ ${filters.roeMin}%`} min={-20} max={50} value={filters.roeMin} onChange={(v) => setFilters((f) => ({ ...f, roeMin: v }))} />
             <RangeFilter label={`Div Yield ≥ ${filters.divMin.toFixed(1)}%`} min={0} max={8} step={0.5} value={filters.divMin} onChange={(v) => setFilters((f) => ({ ...f, divMin: v }))} />
-            <RangeFilter label={`D/E ≤ ${filters.deMax.toFixed(1)}`} min={0} max={20} step={0.5} value={filters.deMax} onChange={(v) => setFilters((f) => ({ ...f, deMax: v }))} />
+            <RangeFilter label={`D/E ≤ ${filters.deMax.toFixed(1)}`} min={0} max={10} step={0.5} value={filters.deMax} onChange={(v) => setFilters((f) => ({ ...f, deMax: v }))} />
             <RangeFilter label={`Rev Growth ≥ ${filters.growthMin}%`} min={-20} max={50} value={filters.growthMin} onChange={(v) => setFilters((f) => ({ ...f, growthMin: v }))} />
             <div>
               <div className="text-muted-foreground uppercase tracking-wider text-[10px] mb-1">52W Position</div>
@@ -258,7 +286,12 @@ function ScreenerPage() {
                       </td>
                       <td className="px-2 py-2 text-xs">{s.sector}</td>
                       <td className="px-2 py-2 text-right font-mono">
-                        <div>₹{s.price.toLocaleString("en-IN")}</div>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span>₹{s.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
+                          {quotes[`${s.symbol}.NS`] && (
+                            <span className={`h-1 w-1 rounded-full ${quotes[`${s.symbol}.NS`].status === "live" ? "bg-emerald-400" : quotes[`${s.symbol}.NS`].status === "delayed" ? "bg-amber-400" : "bg-rose-400"}`} />
+                          )}
+                        </div>
                         <Sparkline symbol={s.symbol} color={s.revenueGrowth >= 0 ? "#22c55e" : "#ef4444"} />
                       </td>
                       <td className="px-2 py-2 text-right font-mono text-xs">{fmtCr(s.marketCap)}</td>
@@ -272,7 +305,11 @@ function ScreenerPage() {
                         {"★".repeat(s.rating)}<span className="text-muted-foreground/30">{"★".repeat(5 - s.rating)}</span>
                       </td>
                       <td className="px-2 py-2 text-center">
-                        <button onClick={(e) => { e.stopPropagation(); add(s.symbol); }} className="text-amber-400 hover:scale-110 transition"><Star className="h-3.5 w-3.5" /></button>
+                        <div className="inline-flex items-center gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); add(s.symbol); toast.success(`${s.symbol} added to watchlist`); }} title="Add to Watchlist" className="text-amber-400 hover:scale-110 transition"><Star className="h-3.5 w-3.5" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); toggleCompare(s); }} title="Compare" className={"hover:scale-110 transition " + (compare.find((x) => x.symbol === s.symbol) ? "text-primary" : "text-muted-foreground")}><BarChart3 className="h-3.5 w-3.5" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); navigate({ to: "/forecast", search: { symbol: s.symbol } as never }); }} title="Forecast" className="text-cyan-400 hover:scale-110 transition"><Sparkles className="h-3.5 w-3.5" /></button>
+                        </div>
                       </td>
                     </tr>
                   );

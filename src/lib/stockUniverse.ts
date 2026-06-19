@@ -24,7 +24,7 @@ export const SECTORS = [
 ];
 
 const baseStocks: Stock[] = [
-  { symbol: "RELIANCE", exchange: "NSE", name: "Reliance Industries Ltd", sector: "Energy", marketCap: 1920000, price: 2950, pe: 28.4, pb: 2.1, roe: 9.8, dividendYield: 0.4, week52High: 3217, week52Low: 2220, debtEquity: 0.42, revenueGrowth: 8.2, eps: 103.8, rating: 4 },
+  { symbol: "RELIANCE", exchange: "NSE", name: "Reliance Industries Ltd", sector: "Energy", marketCap: 900000, price: 1331, pe: 24.2, pb: 2.1, roe: 9.8, dividendYield: 0.4, week52High: 1606, week52Low: 1115, debtEquity: 0.42, revenueGrowth: 8.2, eps: 55.0, rating: 4 },
   { symbol: "TCS", exchange: "NSE", name: "Tata Consultancy Services", sector: "IT", marketCap: 1450000, price: 4020, pe: 32.1, pb: 14.2, roe: 47.3, dividendYield: 1.6, week52High: 4592, week52Low: 3311, debtEquity: 0.0, revenueGrowth: 5.8, eps: 125.2, rating: 5 },
   { symbol: "HDFCBANK", exchange: "NSE", name: "HDFC Bank Ltd", sector: "Banking", marketCap: 1230000, price: 1640, pe: 19.2, pb: 2.8, roe: 15.9, dividendYield: 1.1, week52High: 1880, week52Low: 1363, debtEquity: 6.9, revenueGrowth: 22.1, eps: 85.4, rating: 5 },
   { symbol: "INFY", exchange: "NSE", name: "Infosys Ltd", sector: "IT", marketCap: 760000, price: 1840, pe: 26.8, pb: 8.4, roe: 32.1, dividendYield: 2.3, week52High: 2006, week52Low: 1358, debtEquity: 0.0, revenueGrowth: 3.2, eps: 68.7, rating: 4 },
@@ -86,6 +86,31 @@ const baseStocks: Stock[] = [
 ];
 
 export const STOCK_UNIVERSE: Stock[] = baseStocks;
+
+/**
+ * Real fundamental-driven 1-5 star rating.
+ * Weighted: ROE (35%), PE relative to sector (15%), revenue growth (20%),
+ * dividend yield (10%), debt/equity safety (20%). Distribution is intentionally
+ * spread — most stocks land 2-4, only genuinely strong fundamentals reach 5.
+ */
+export function calcRating(s: Stock, universe: Stock[] = STOCK_UNIVERSE): number {
+  // Sector-relative PE: lower is better, but very low PE (<5) penalised as a red flag.
+  const sectorPeers = universe.filter((x) => x.sector === s.sector && x.pe > 0);
+  const sectorPe = sectorPeers.length ? sectorPeers.reduce((a, x) => a + x.pe, 0) / sectorPeers.length : 25;
+  const peRatio = s.pe > 0 ? s.pe / sectorPe : 2;
+  const peScore = s.pe < 5 ? 0.3 : Math.max(0, Math.min(1, 1.6 - peRatio));
+
+  const roeScore = Math.max(0, Math.min(1, s.roe / 30));
+  const growthScore = Math.max(0, Math.min(1, (s.revenueGrowth + 5) / 30));
+  const divScore = Math.max(0, Math.min(1, s.dividendYield / 5));
+  const safetyScore = Math.max(0, Math.min(1, 1 - s.debtEquity / 5));
+
+  const composite =
+    roeScore * 0.35 + peScore * 0.15 + growthScore * 0.2 + divScore * 0.1 + safetyScore * 0.2;
+  // Map 0-1 → 1-5 stars, with mild stretching so the distribution isn't flat.
+  const stars = 1 + composite * 4;
+  return Math.max(1, Math.min(5, Math.round(stars)));
+}
 
 export function dexterScore(s: Stock): number {
   const roeScore = Math.min(s.roe, 50) * 0.3;
