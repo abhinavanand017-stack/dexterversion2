@@ -1,29 +1,37 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info, Settings2 } from "lucide-react";
+import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info, Settings2, Clock, History } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, BarChart, Bar as RBar } from "recharts";
 import { buildFeatures } from "@/lib/forecast/features";
 import { runSelected, MODEL_SPECS, type ModelResult, type ModelSpec } from "@/lib/forecast/models";
 import { computeConsensus, type Consensus } from "@/lib/forecast/consensus";
 import { loadStock, loadFundNav } from "@/lib/forecast/data";
 import type { Bar as PriceBar } from "@/lib/forecast/features";
+import { runLongTermForecast, LONG_HORIZONS, cagrSourceLabel, type LongHorizon, type LongTermResult } from "@/lib/forecast/longterm";
 import { StockCombobox, FundCombobox } from "@/components/AssetCombobox";
 import { NIFTY500, type NiftyStock } from "@/lib/nifty500";
 import { FUND_UNIVERSE, FUND_CATEGORY_LABELS, type CuratedFund } from "@/lib/fundUniverse";
+import { INDICES, getIndex } from "@/lib/indices";
+import { fetchYahooChart } from "@/lib/yahoo.functions";
 
 export const Route = createFileRoute("/forecast")({
+  validateSearch: (s: Record<string, unknown>) => ({
+    index: typeof s.index === "string" ? s.index : undefined,
+    tier: s.tier === "long" || s.tier === "short" ? s.tier : undefined,
+  }),
   head: () => ({
     meta: [
-      { title: "Dexter Forecaster — Customizable Multi-Model Engine" },
-      { name: "description", content: "Algorithmic forecasting engine for Indian stocks and mutual funds. Pick the models, the lookback, and the confidence band." },
+      { title: "Dexter Forecaster — Short & Long-Term Multi-Model Engine" },
+      { name: "description", content: "Tactical 1–90 day forecasts plus CAGR + Monte Carlo long-term projections for Indian stocks, funds, and indices." },
     ],
   }),
   component: ForecastPage,
 });
 
-type Mode = "stock" | "fund";
+type Mode = "stock" | "fund" | "index";
+type Tier = "short" | "long";
 
-const HORIZONS = [7, 15, 30, 60, 90];
+const SHORT_HORIZONS = [7, 15, 30, 60, 90];
 const LOOKBACKS = [
   { id: "6m", label: "6 months", days: 130 },
   { id: "1y", label: "1 year", days: 252 },
@@ -31,6 +39,10 @@ const LOOKBACKS = [
   { id: "5y", label: "5 years", days: 1260 },
 ];
 const CONFIDENCE_BANDS = [80, 90, 95] as const;
+
+// Short-term-only models — disabled in long-term mode (multi-year forecasts).
+const SHORT_TERM_ONLY = new Set(["svr", "knn", "cnn1d", "wavenet", "transformer"]);
+const LONG_PRESET = ["arima", "prophet", "ensemble", "mc"];
 
 const PRESET_RECOMMENDED = MODEL_SPECS.filter((s) => s.recommended).map((s) => s.id);
 const PRESET_ALL = MODEL_SPECS.map((s) => s.id);
@@ -74,8 +86,15 @@ function fmtPrice(v: number, currency = "₹"): string {
 }
 
 function ForecastPage() {
-  const [mode, setMode] = useState<Mode>("stock");
-  const [query, setQuery] = useState("RELIANCE");
+  const search = Route.useSearch();
+  const [tier, setTier] = useState<Tier>(() => (search.tier === "long" ? "long" : "short"));
+  const [longHorizon, setLongHorizon] = useState<LongHorizon>("1y");
+  const [longResult, setLongResult] = useState<LongTermResult | null>(null);
+  const [rebase, setRebase] = useState(false);                 // Rebase to ₹1,00,000
+  const [cagrAdjust, setCagrAdjust] = useState(0);             // %-point nudge to historical CAGR
+
+  const [mode, setMode] = useState<Mode>(() => (search.index ? "index" : "stock"));
+  const [query, setQuery] = useState(search.index ? (getIndex(search.index)?.yahooSymbol ?? "RELIANCE") : "RELIANCE");
   const [horizon, setHorizon] = useState(30);
   const [customHorizon, setCustomHorizon] = useState("");
   const [lookback, setLookback] = useState("1y");
@@ -98,6 +117,7 @@ function ForecastPage() {
 
   const [pickedStock, setPickedStock] = useState<NiftyStock | null>(() => NIFTY500.find((s) => s.symbol === "RELIANCE") ?? null);
   const [pickedFund, setPickedFund] = useState<CuratedFund | null>(null);
+  const [pickedIndex, setPickedIndex] = useState<string | null>(() => search.index && getIndex(search.index) ? search.index : null);
   const [uiMode, setUiMode] = useState<"simple" | "advanced">(() => {
     try { return (localStorage.getItem("dx_forecast_ui") as "simple" | "advanced") || "simple"; } catch { return "simple"; }
   });
@@ -124,6 +144,37 @@ function ForecastPage() {
     return horizon;
   }, [customHorizon, horizon]);
 
+  // Switching to long-term auto-prunes models that are meaningless multi-year.
+  useEffect(() => {
+    if (tier === "long") {
+      setSelected((prev) => {
+        const next = new Set(Array.from(prev).filter((id) => !SHORT_TERM_ONLY.has(id)));
+        if (next.size === 0) LONG_PRESET.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  }, [tier]);
+
+  async function loadPriceSeries(): Promise<{ bars: PriceBar[]; metaOut: typeof meta }> {
+    if (mode === "index") {
+      const idx = pickedIndex ? getIndex(pickedIndex) : null;
+      if (!idx) throw new Error("Pick an index from the dropdown");
+      // Long horizons want at least 5-10y of data so MC vol & CAGR are stable
+      const range = tier === "long" ? "10y" : "2y";
+      const r = await fetchYahooChart({ data: { symbol: idx.yahooSymbol, range, interval: "1d" } });
+      if (!r.ok || !r.bars.length) throw new Error(r.error || "No data for this index");
+      return { bars: r.bars.map((b) => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v })), metaOut: { name: idx.name, exchange: idx.exchange, currency: "₹" } };
+    }
+    if (mode === "stock") {
+      const r = await loadStock(query, "NS");
+      return { bars: r, metaOut: { name: query.toUpperCase(), exchange: "NSE", currency: "₹" } };
+    }
+    const code = Number(query);
+    if (!Number.isFinite(code)) throw new Error("Pick a fund from the dropdown");
+    const r = await loadFundNav(code);
+    return { bars: r.bars, metaOut: { name: r.meta?.scheme_name || `Scheme ${code}`, exchange: r.meta?.fund_house || "MF", currency: "₹" } };
+  }
+
   const handleSearch = async () => {
     if (selected.size === 0) {
       setError("Pick at least one model.");
@@ -132,28 +183,18 @@ function ForecastPage() {
     setLoading(true);
     setError(null);
     setResults([]);
+    setLongResult(null);
     setHiddenInChart(new Set());
     setProgress({ done: 0, total: selected.size });
     try {
-      let priceBars: PriceBar[];
-      if (mode === "stock") {
-        const r = await loadStock(query, "NS");
-        priceBars = r;
-        setMeta({ name: query.toUpperCase(), exchange: "NSE", currency: "₹" });
-      } else {
-        const code = Number(query);
-        if (!Number.isFinite(code)) throw new Error("Pick a fund from the dropdown");
-        const r = await loadFundNav(code);
-        priceBars = r.bars;
-        setMeta({ name: r.meta?.scheme_name || `Scheme ${code}`, exchange: r.meta?.fund_house || "MF", currency: "₹" });
-      }
-      // Apply lookback window
+      const { bars: priceBars, metaOut } = await loadPriceSeries();
+      setMeta(metaOut);
       const lb = LOOKBACKS.find((l) => l.id === lookback)?.days ?? 252;
       const trimmed = priceBars.slice(Math.max(0, priceBars.length - lb));
       setBars(trimmed);
       const rows = buildFeatures(trimmed);
       const collected: ModelResult[] = [];
-      const ids = Array.from(selected);
+      const ids = Array.from(selected).filter((id) => !SHORT_TERM_ONLY.has(id) || tier === "short");
       await runSelected(rows, effectiveHorizon, ids, (res, p) => {
         collected.push(res);
         setResults([...collected]);
@@ -166,11 +207,43 @@ function ForecastPage() {
     }
   };
 
+  const handleLongRun = async () => {
+    setLoading(true);
+    setError(null);
+    setResults([]);
+    setLongResult(null);
+    try {
+      const { bars: priceBars, metaOut } = await loadPriceSeries();
+      setMeta(metaOut);
+      setBars(priceBars);
+      const fundCagr = mode === "fund" && pickedFund ? undefined : undefined; // VR enrichment not yet wired into CuratedFund
+      const res = runLongTermForecast({
+        bars: priceBars,
+        horizon: longHorizon,
+        confidence: confidenceBand,
+        mcPaths,
+        cagrOverride: cagrAdjust || null,
+        fundCagr,
+      });
+      setLongResult(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const runForTier = () => (tier === "long" ? handleLongRun() : handleSearch());
+
   // sync `query` with picked asset so handleSearch + meta keep working
   useEffect(() => {
     if (mode === "stock" && pickedStock) setQuery(pickedStock.symbol);
     else if (mode === "fund" && pickedFund) setQuery(String(pickedFund.code));
-  }, [mode, pickedStock, pickedFund]);
+    else if (mode === "index" && pickedIndex) {
+      const idx = getIndex(pickedIndex);
+      if (idx) setQuery(idx.yahooSymbol);
+    }
+  }, [mode, pickedStock, pickedFund, pickedIndex]);
 
   // Simple mode → bundle of curated model ids
   const SIMPLE_BUNDLES: Record<string, string[]> = {
@@ -293,6 +366,8 @@ function ForecastPage() {
             className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">📈 Stock</button>
           <button onClick={() => setMode("fund")} data-active={mode === "fund"}
             className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">💰 Mutual Fund</button>
+          <button onClick={() => setMode("index")} data-active={mode === "index"}
+            className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">📊 Index</button>
           <div className="ml-auto flex gap-1 items-center">
             <span className="text-[10px] text-muted-foreground">Mode</span>
             {(["simple", "advanced"] as const).map((m) => (
@@ -302,9 +377,24 @@ function ForecastPage() {
           </div>
         </div>
 
-        {mode === "stock"
-          ? <StockCombobox value={pickedStock} onChange={(s) => { setPickedStock(s); setQuery(s.symbol); }} />
-          : <FundCombobox value={pickedFund} onChange={(f) => { setPickedFund(f); setQuery(String(f.code)); }} />}
+        {mode === "stock" && <StockCombobox value={pickedStock} onChange={(s) => { setPickedStock(s); setQuery(s.symbol); }} />}
+        {mode === "fund"  && <FundCombobox  value={pickedFund}  onChange={(f) => { setPickedFund(f);  setQuery(String(f.code)); }} />}
+        {mode === "index" && (
+          <select
+            value={pickedIndex ?? ""}
+            onChange={(e) => { setPickedIndex(e.target.value); const idx = getIndex(e.target.value); if (idx) setQuery(idx.yahooSymbol); }}
+            className="w-full px-3 py-2 text-sm rounded border border-border bg-background/40 font-mono"
+          >
+            <option value="">— Pick an NSE/BSE index —</option>
+            {(["broad","sectoral","strategy"] as const).map((g) => (
+              <optgroup key={g} label={g === "broad" ? "Broad Market" : g === "sectoral" ? "Sectoral" : "Volatility & Strategy"}>
+                {INDICES.filter((i) => i.group === g).map((i) => (
+                  <option key={i.key} value={i.key}>{i.name} ({i.exchange})</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        )}
 
         {/* Asset context card */}
         {mode === "stock" && pickedStock && (
@@ -322,22 +412,63 @@ function ForecastPage() {
           </div>
         )}
 
+        {/* Horizon Tier toggle */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Horizon tier:</span>
+          {(["short","long"] as const).map((t) => (
+            <button key={t} onClick={() => setTier(t)} data-active={tier === t}
+              className="px-3 py-1 text-xs rounded-full border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">
+              {t === "short" ? "Short-Term (1–90d)" : "Long-Term (6M–10Y)"}
+            </button>
+          ))}
+          <span className="text-[10px] text-muted-foreground ml-1">
+            {tier === "short" ? "Tactical pattern detection — 17 models" : "Structural projection — CAGR + Monte Carlo"}
+          </span>
+        </div>
+
         <div className="flex flex-col md:flex-row gap-2 flex-wrap items-stretch">
           <div className="flex gap-1 flex-wrap">
-            {HORIZONS.map((h) => (
-              <button key={h} onClick={() => { setHorizon(h); setCustomHorizon(""); }} data-active={horizon === h && !customHorizon}
-                className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">{h}d</button>
-            ))}
+            {tier === "short"
+              ? SHORT_HORIZONS.map((h) => (
+                  <button key={h} onClick={() => { setHorizon(h); setCustomHorizon(""); }} data-active={horizon === h && !customHorizon}
+                    className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">{h}d</button>
+                ))
+              : LONG_HORIZONS.map((h) => (
+                  <button key={h.id} onClick={() => setLongHorizon(h.id)} data-active={longHorizon === h.id}
+                    className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">{h.label}</button>
+                ))}
           </div>
           <button
-            onClick={handleSearch}
-            disabled={loading || !query || (mode === "stock" ? !pickedStock : !pickedFund)}
+            onClick={runForTier}
+            disabled={loading || (mode === "stock" ? !pickedStock : mode === "fund" ? !pickedFund : !pickedIndex)}
             className="ml-auto px-4 py-2 rounded bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {loading ? `Running ${progress.done}/${progress.total}…` : !query ? "Select a stock or fund to begin" : `Run ${selected.size} model${selected.size === 1 ? "" : "s"}`}
+            {loading
+              ? (tier === "short" ? `Running ${progress.done}/${progress.total}…` : "Simulating paths…")
+              : tier === "short"
+                ? `Run ${selected.size} model${selected.size === 1 ? "" : "s"}`
+                : `Run Long-Term Forecast`}
           </button>
         </div>
+
+        {tier === "long" && (
+          <div className="rounded border border-border bg-background/30 p-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label className="text-[11px] text-muted-foreground">CAGR adjustment: <span className="font-mono">{cagrAdjust >= 0 ? "+" : ""}{cagrAdjust}%</span></label>
+              <input type="range" min={-10} max={10} step={0.5} value={cagrAdjust}
+                onChange={(e) => setCagrAdjust(Number(e.target.value))} className="w-full" />
+              <div className="text-[10px] text-muted-foreground">Nudge the historical baseline up or down.</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input id="rebase" type="checkbox" checked={rebase} onChange={(e) => setRebase(e.target.checked)} />
+              <label htmlFor="rebase" className="cursor-pointer">Rebase to ₹1,00,000 (growth-of-lakh view)</label>
+            </div>
+            <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <History className="h-3 w-3" /> Long-horizon mode uses CAGR extrapolation + Monte Carlo simulation. Short-term-only ML models are disabled.
+            </div>
+          </div>
+        )}
 
         {/* Simple mode bundles */}
         {uiMode === "simple" && (
@@ -361,8 +492,8 @@ function ForecastPage() {
             <span className="ml-auto text-[11px] text-muted-foreground font-mono">{selected.size} / {MODEL_SPECS.length} selected</span>
           </div>
         )}
-        {/* Model picker grouped — Advanced only */}
-        {uiMode === "advanced" && (
+        {/* Model picker grouped — Advanced only, short-term tier only */}
+        {uiMode === "advanced" && tier === "short" && (
           <div className="space-y-2">
             {GROUPS.map((g) => {
               const models = MODEL_SPECS.filter((m) => m.groupLabel === g);
@@ -372,9 +503,12 @@ function ForecastPage() {
                   <div className="flex flex-wrap gap-1.5">
                     {models.map((m) => {
                       const on = selected.has(m.id);
+                      const disabled = SHORT_TERM_ONLY.has(m.id) && (tier as Tier) === "long";
                       return (
-                        <button key={m.id} onClick={() => toggleModel(m.id)} title={m.tooltip}
-                          className="px-2.5 py-1 text-xs rounded border font-mono"
+                        <button key={m.id} onClick={() => !disabled && toggleModel(m.id)}
+                          title={disabled ? "Disabled for multi-year horizons — designed for short-term patterns." : m.tooltip}
+                          disabled={disabled}
+                          className="px-2.5 py-1 text-xs rounded border font-mono disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{
                             borderColor: on ? colorFor(m.id) : "rgba(255,255,255,0.1)",
                             background: on ? `${colorFor(m.id)}20` : "transparent",
@@ -454,6 +588,13 @@ function ForecastPage() {
         )}
         {error && <div className="text-sm text-red-400 flex items-center gap-2"><AlertTriangle className="w-4 h-4" /> {error}</div>}
       </div>
+
+      {/* Long-term forecast panel */}
+      {tier === "long" && longResult && (
+        <LongTermPanel res={longResult} meta={meta} rebase={rebase} confidence={confidenceBand} />
+      )}
+
+
 
       {/* Hero consensus */}
       {consensus && agreement && (
@@ -687,5 +828,102 @@ function BundleCard({ emoji, title, desc, onClick }: { emoji: string; title: str
       <div className="font-semibold text-sm mt-1">{title}</div>
       <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{desc}</div>
     </button>
+  );
+}
+
+// ============= Long-term forecast panel =============
+
+function LongTermPanel({
+  res, meta, rebase, confidence,
+}: {
+  res: LongTermResult;
+  meta: { name: string; exchange: string; currency: string };
+  rebase: boolean;
+  confidence: number;
+}) {
+  const scale = rebase ? 100000 / res.currentPrice : 1;
+  const fmt = (v: number) => `${meta.currency}${(v * scale).toLocaleString("en-IN", { maximumFractionDigits: rebase ? 0 : 2 })}`;
+  const data = res.timestamps.map((t, i) => ({
+    t,
+    cagr: res.cagrPath[i] * scale,
+    median: res.mcMedian[i] * scale,
+    low: res.mcLow[i] * scale,
+    high: res.mcHigh[i] * scale,
+  }));
+  const positive = res.endMedian >= res.currentPrice;
+  const lakhEnd = (res.endMedian / res.currentPrice) * 100000;
+  return (
+    <div className="dx-glass p-5 space-y-4">
+      <div className="grid md:grid-cols-3 gap-4">
+        <div>
+          <div className="text-xs text-muted-foreground font-mono">{meta.exchange}</div>
+          <div className="text-2xl font-semibold truncate">{meta.name}</div>
+          <div className="text-3xl font-mono mt-2">{fmt(res.currentPrice)}</div>
+          <div className="text-xs text-muted-foreground mt-1">
+            Long-term horizon: <span className="text-foreground">{res.horizonLabel}</span>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <div className="text-xs text-muted-foreground">Central projection (CAGR extrapolation)</div>
+          <div className="text-xl font-mono" style={{ color: positive ? "#00ff88" : "#ff4466" }}>
+            {fmt(res.endCagr)}
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            Drift used: <span className="font-mono text-foreground">{res.cagrUsed.toFixed(2)}% /yr</span> · source: {cagrSourceLabel(res.cagrSource)}
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            Annualised vol: <span className="font-mono">{res.sigmaAnnual.toFixed(1)}%</span> · paths: <span className="font-mono">{res.paths}</span>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <div className="text-xs text-muted-foreground">{confidence}% Monte Carlo range at {res.horizonLabel}</div>
+          <div className="text-lg font-mono">
+            {fmt(res.endLow)} — {fmt(res.endHigh)}
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            Median outcome: <span className="font-mono text-foreground">{fmt(res.endMedian)}</span>
+          </div>
+          <div className="text-[11px] text-muted-foreground">
+            Prob. of profit: <span className="font-mono text-foreground">{res.probPositive.toFixed(0)}%</span>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ width: "100%", height: 340 }}>
+        <ResponsiveContainer>
+          <ComposedChart data={data}>
+            <CartesianGrid stroke="rgba(255,255,255,0.05)" />
+            <XAxis dataKey="t"
+              tickFormatter={(t) => {
+                const d = new Date(t);
+                return res.years <= 1
+                  ? d.toLocaleDateString("en-IN", { month: "short", year: "2-digit" })
+                  : `${d.getFullYear()}`;
+              }}
+              tick={{ fontSize: 10, fill: "#94a3b8" }} />
+            <YAxis domain={["auto","auto"]}
+              tickFormatter={(v) => rebase ? `₹${Math.round(Number(v) / 1000)}k` : Number(v).toFixed(0)}
+              tick={{ fontSize: 10, fill: "#94a3b8" }} />
+            <Tooltip contentStyle={{ background: "#0d1117", border: "1px solid rgba(0,212,255,0.3)" }}
+              labelFormatter={(t) => new Date(t as number).toLocaleDateString("en-IN")} />
+            <ReferenceLine y={res.currentPrice * scale} stroke="#94a3b8" strokeDasharray="3 3" label={{ value: "Today", fill: "#94a3b8", fontSize: 10, position: "right" }} />
+            <Area dataKey="high" stroke="none" fill="rgba(0,212,255,0.18)" isAnimationActive={false} />
+            <Area dataKey="low"  stroke="none" fill="#060810" isAnimationActive={false} />
+            <Line dataKey="median" stroke="#00d4ff" strokeWidth={2}   dot={false} isAnimationActive={false} name="MC median" />
+            <Line dataKey="cagr"   stroke="#00ff88" strokeWidth={2.5} dot={false} isAnimationActive={false} name="CAGR extrapolation" />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div>
+        <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">In plain English</div>
+        <p className="text-sm leading-relaxed">
+          At the {cagrSourceLabel(res.cagrSource).toLowerCase()} of <span className="font-mono">{res.cagrUsed.toFixed(2)}%</span>, a lumpsum of <span className="font-mono">₹1,00,000</span> in <span className="font-semibold">{meta.name}</span> today
+          could grow to approximately <span className="font-mono font-semibold" style={{ color: positive ? "#00ff88" : "#ff4466" }}>₹{Math.round(lakhEnd).toLocaleString("en-IN")}</span> over <span className="font-semibold">{res.horizonLabel}</span>,
+          based on Monte Carlo simulation across <span className="font-mono">{res.paths}</span> paths. <span className="font-mono">{res.probPositive.toFixed(0)}%</span> of simulated outcomes were profitable.
+          This is a statistical projection, not a guarantee — past returns do not predict future performance, especially over multi-year periods where fundamentals, fund management, and market regimes can change substantially.
+        </p>
+      </div>
+    </div>
   );
 }
