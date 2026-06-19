@@ -1,10 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
-import { STOCK_UNIVERSE, SECTORS, dexterScore, type Stock } from "@/lib/stockUniverse";
+import { STOCK_UNIVERSE, SECTORS, dexterScore, calcRating, type Stock } from "@/lib/stockUniverse";
 import { useWatchlist } from "@/components/WatchlistDrawer";
-import { X, Download, Star, Filter, ExternalLink } from "lucide-react";
+import { useLiveQuotes } from "@/hooks/useLiveQuotes";
+import { LiveBadge } from "@/components/LiveBadge";
+import { X, Download, Star, Filter, ExternalLink, BarChart3, Sparkles } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from "recharts";
 import { toast } from "sonner";
 
