@@ -492,8 +492,8 @@ function ForecastPage() {
             <span className="ml-auto text-[11px] text-muted-foreground font-mono">{selected.size} / {MODEL_SPECS.length} selected</span>
           </div>
         )}
-        {/* Model picker grouped — Advanced only */}
-        {uiMode === "advanced" && (
+        {/* Model picker grouped — Advanced only, short-term tier only */}
+        {uiMode === "advanced" && tier === "short" && (
           <div className="space-y-2">
             {GROUPS.map((g) => {
               const models = MODEL_SPECS.filter((m) => m.groupLabel === g);
@@ -503,9 +503,12 @@ function ForecastPage() {
                   <div className="flex flex-wrap gap-1.5">
                     {models.map((m) => {
                       const on = selected.has(m.id);
+                      const disabled = tier === "long" && SHORT_TERM_ONLY.has(m.id);
                       return (
-                        <button key={m.id} onClick={() => toggleModel(m.id)} title={m.tooltip}
-                          className="px-2.5 py-1 text-xs rounded border font-mono"
+                        <button key={m.id} onClick={() => !disabled && toggleModel(m.id)}
+                          title={disabled ? "Disabled for multi-year horizons — designed for short-term patterns." : m.tooltip}
+                          disabled={disabled}
+                          className="px-2.5 py-1 text-xs rounded border font-mono disabled:opacity-40 disabled:cursor-not-allowed"
                           style={{
                             borderColor: on ? colorFor(m.id) : "rgba(255,255,255,0.1)",
                             background: on ? `${colorFor(m.id)}20` : "transparent",
