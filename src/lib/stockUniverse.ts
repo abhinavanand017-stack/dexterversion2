@@ -24,7 +24,7 @@ export const SECTORS = [
 ];
 
 const baseStocks: Stock[] = [
-  { symbol: "RELIANCE", exchange: "NSE", name: "Reliance Industries Ltd", sector: "Energy", marketCap: 1920000, price: 2950, pe: 28.4, pb: 2.1, roe: 9.8, dividendYield: 0.4, week52High: 3217, week52Low: 2220, debtEquity: 0.42, revenueGrowth: 8.2, eps: 103.8, rating: 4 },
+  { symbol: "RELIANCE", exchange: "NSE", name: "Reliance Industries Ltd", sector: "Energy", marketCap: 900000, price: 1331, pe: 24.2, pb: 2.1, roe: 9.8, dividendYield: 0.4, week52High: 1606, week52Low: 1115, debtEquity: 0.42, revenueGrowth: 8.2, eps: 55.0, rating: 4 },
   { symbol: "TCS", exchange: "NSE", name: "Tata Consultancy Services", sector: "IT", marketCap: 1450000, price: 4020, pe: 32.1, pb: 14.2, roe: 47.3, dividendYield: 1.6, week52High: 4592, week52Low: 3311, debtEquity: 0.0, revenueGrowth: 5.8, eps: 125.2, rating: 5 },
   { symbol: "HDFCBANK", exchange: "NSE", name: "HDFC Bank Ltd", sector: "Banking", marketCap: 1230000, price: 1640, pe: 19.2, pb: 2.8, roe: 15.9, dividendYield: 1.1, week52High: 1880, week52Low: 1363, debtEquity: 6.9, revenueGrowth: 22.1, eps: 85.4, rating: 5 },
   { symbol: "INFY", exchange: "NSE", name: "Infosys Ltd", sector: "IT", marketCap: 760000, price: 1840, pe: 26.8, pb: 8.4, roe: 32.1, dividendYield: 2.3, week52High: 2006, week52Low: 1358, debtEquity: 0.0, revenueGrowth: 3.2, eps: 68.7, rating: 4 },
