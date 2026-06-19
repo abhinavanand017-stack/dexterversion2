@@ -9,7 +9,7 @@ export function Footer() {
         <ThemeToggle />
       </div>
       <div className="hidden md:block text-xs text-muted-foreground font-mono truncate">
-        Built for Indian Markets · NSE/BSE · Cmd+K to search
+        For research, forecasting & news only — do not trade without your own due diligence
       </div>
       <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground font-mono">
         <span className="hidden sm:inline">Dexter © 2026</span>

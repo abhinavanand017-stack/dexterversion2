@@ -757,9 +757,11 @@ function ForecastPage() {
       )}
 
       <p className="text-xs text-muted-foreground italic border-t border-border pt-3">
-        Dexter's algorithmic signal is for informational purposes only. Not SEBI-registered investment
-        advice. Past model accuracy does not guarantee future performance. Always consult a SEBI-registered
-        advisor before investing.
+        This app is for research, forecasting and news only — do not trust signals without your own research.
+        Forecasts are produced by deterministic mathematical models on seeded synthetic OHLCV for reproducibility.
+        They are research outputs, not investment advice. Black-swan events, regime breaks, and behavioural
+        contamination are out of scope. Trade at your own discretion. Not SEBI-registered investment advice.
+        Past model accuracy does not guarantee future performance. Always consult a SEBI-registered advisor before investing.
       </p>
     </div>
   );
