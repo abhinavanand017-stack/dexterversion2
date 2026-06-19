@@ -86,8 +86,15 @@ function fmtPrice(v: number, currency = "₹"): string {
 }
 
 function ForecastPage() {
-  const [mode, setMode] = useState<Mode>("stock");
-  const [query, setQuery] = useState("RELIANCE");
+  const search = Route.useSearch();
+  const [tier, setTier] = useState<Tier>(() => (search.tier === "long" ? "long" : "short"));
+  const [longHorizon, setLongHorizon] = useState<LongHorizon>("1y");
+  const [longResult, setLongResult] = useState<LongTermResult | null>(null);
+  const [rebase, setRebase] = useState(false);                 // Rebase to ₹1,00,000
+  const [cagrAdjust, setCagrAdjust] = useState(0);             // %-point nudge to historical CAGR
+
+  const [mode, setMode] = useState<Mode>(() => (search.index ? "index" : "stock"));
+  const [query, setQuery] = useState(search.index ? (getIndex(search.index)?.yahooSymbol ?? "RELIANCE") : "RELIANCE");
   const [horizon, setHorizon] = useState(30);
   const [customHorizon, setCustomHorizon] = useState("");
   const [lookback, setLookback] = useState("1y");
@@ -110,6 +117,7 @@ function ForecastPage() {
 
   const [pickedStock, setPickedStock] = useState<NiftyStock | null>(() => NIFTY500.find((s) => s.symbol === "RELIANCE") ?? null);
   const [pickedFund, setPickedFund] = useState<CuratedFund | null>(null);
+  const [pickedIndex, setPickedIndex] = useState<string | null>(() => search.index && getIndex(search.index) ? search.index : null);
   const [uiMode, setUiMode] = useState<"simple" | "advanced">(() => {
     try { return (localStorage.getItem("dx_forecast_ui") as "simple" | "advanced") || "simple"; } catch { return "simple"; }
   });
