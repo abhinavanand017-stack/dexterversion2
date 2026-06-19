@@ -224,11 +224,11 @@ function ScreenerPage() {
                 })}
               </div>
             </div>
-            <RangeFilter label={`P/E ≤ ${filters.peMax}`} min={5} max={600} value={filters.peMax} onChange={(v) => setFilters((f) => ({ ...f, peMax: v }))} />
-            <RangeFilter label={`P/B ≤ ${filters.pbMax.toFixed(1)}`} min={0} max={100} step={0.5} value={filters.pbMax} onChange={(v) => setFilters((f) => ({ ...f, pbMax: v }))} />
+            <RangeFilter label={`P/E ≤ ${filters.peMax}`} min={5} max={100} value={filters.peMax} onChange={(v) => setFilters((f) => ({ ...f, peMax: v }))} />
+            <RangeFilter label={`P/B ≤ ${filters.pbMax.toFixed(1)}`} min={0} max={30} step={0.5} value={filters.pbMax} onChange={(v) => setFilters((f) => ({ ...f, pbMax: v }))} />
             <RangeFilter label={`ROE ≥ ${filters.roeMin}%`} min={-20} max={50} value={filters.roeMin} onChange={(v) => setFilters((f) => ({ ...f, roeMin: v }))} />
             <RangeFilter label={`Div Yield ≥ ${filters.divMin.toFixed(1)}%`} min={0} max={8} step={0.5} value={filters.divMin} onChange={(v) => setFilters((f) => ({ ...f, divMin: v }))} />
-            <RangeFilter label={`D/E ≤ ${filters.deMax.toFixed(1)}`} min={0} max={20} step={0.5} value={filters.deMax} onChange={(v) => setFilters((f) => ({ ...f, deMax: v }))} />
+            <RangeFilter label={`D/E ≤ ${filters.deMax.toFixed(1)}`} min={0} max={10} step={0.5} value={filters.deMax} onChange={(v) => setFilters((f) => ({ ...f, deMax: v }))} />
             <RangeFilter label={`Rev Growth ≥ ${filters.growthMin}%`} min={-20} max={50} value={filters.growthMin} onChange={(v) => setFilters((f) => ({ ...f, growthMin: v }))} />
             <div>
               <div className="text-muted-foreground uppercase tracking-wider text-[10px] mb-1">52W Position</div>
