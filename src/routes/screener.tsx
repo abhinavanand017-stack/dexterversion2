@@ -90,6 +90,7 @@ function Sparkline({ symbol, color }: { symbol: string; color: string }) {
 
 function ScreenerPage() {
   const search = Route.useSearch();
+  const navigate = useNavigate();
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [textSearch, setTextSearch] = useState(search.q || "");
   const [sortKey, setSortKey] = useState<keyof Stock>("marketCap");
@@ -100,24 +101,43 @@ function ScreenerPage() {
   const [showFilters, setShowFilters] = useState(true);
   const { add } = useWatchlist();
 
+  // Pre-compute live ratings once per universe so the distribution actually varies.
+  const ratedUniverse = useMemo<Stock[]>(
+    () => STOCK_UNIVERSE.map((s) => ({ ...s, rating: calcRating(s) })),
+    [],
+  );
+
+  // Live prices for the entire universe — server fn batches & caches; safe for ~500 symbols.
+  const allSymbols = useMemo(() => ratedUniverse.map((s) => `${s.symbol}.NS`), [ratedUniverse]);
+  const { quotes, status: liveStatus, fetchedAt } = useLiveQuotes(allSymbols);
+
+  // Merge live prices into the working dataset.
+  const liveUniverse = useMemo<Stock[]>(() => {
+    return ratedUniverse.map((s) => {
+      const q = quotes[`${s.symbol}.NS`];
+      if (!q || !q.price) return s;
+      return { ...s, price: q.price };
+    });
+  }, [ratedUniverse, quotes]);
+
   useEffect(() => {
     if (search.q) {
       setTextSearch(search.q);
-      const s = STOCK_UNIVERSE.find((x) => x.symbol === search.q.toUpperCase());
+      const s = liveUniverse.find((x) => x.symbol === search.q.toUpperCase());
       if (s) setSelected(s);
     }
-  }, [search.q]);
+  }, [search.q, liveUniverse]);
 
   const filtered = useMemo(() => {
     const Q = textSearch.trim().toUpperCase();
-    let rows = STOCK_UNIVERSE.filter((s) => matches(s, filters));
+    let rows = liveUniverse.filter((s) => matches(s, filters));
     if (Q) rows = rows.filter((s) => s.symbol.includes(Q) || s.name.toUpperCase().includes(Q));
     rows.sort((a, b) => {
       const av = a[sortKey] as number; const bv = b[sortKey] as number;
       return sortDir === "asc" ? av - bv : bv - av;
     });
     return rows;
-  }, [filters, textSearch, sortKey, sortDir]);
+  }, [filters, textSearch, sortKey, sortDir, liveUniverse]);
 
   const PAGE_SIZE = 20;
   const pageRows = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
