@@ -366,6 +366,8 @@ function ForecastPage() {
             className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">📈 Stock</button>
           <button onClick={() => setMode("fund")} data-active={mode === "fund"}
             className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">💰 Mutual Fund</button>
+          <button onClick={() => setMode("index")} data-active={mode === "index"}
+            className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">📊 Index</button>
           <div className="ml-auto flex gap-1 items-center">
             <span className="text-[10px] text-muted-foreground">Mode</span>
             {(["simple", "advanced"] as const).map((m) => (
@@ -375,9 +377,24 @@ function ForecastPage() {
           </div>
         </div>
 
-        {mode === "stock"
-          ? <StockCombobox value={pickedStock} onChange={(s) => { setPickedStock(s); setQuery(s.symbol); }} />
-          : <FundCombobox value={pickedFund} onChange={(f) => { setPickedFund(f); setQuery(String(f.code)); }} />}
+        {mode === "stock" && <StockCombobox value={pickedStock} onChange={(s) => { setPickedStock(s); setQuery(s.symbol); }} />}
+        {mode === "fund"  && <FundCombobox  value={pickedFund}  onChange={(f) => { setPickedFund(f);  setQuery(String(f.code)); }} />}
+        {mode === "index" && (
+          <select
+            value={pickedIndex ?? ""}
+            onChange={(e) => { setPickedIndex(e.target.value); const idx = getIndex(e.target.value); if (idx) setQuery(idx.yahooSymbol); }}
+            className="w-full px-3 py-2 text-sm rounded border border-border bg-background/40 font-mono"
+          >
+            <option value="">— Pick an NSE/BSE index —</option>
+            {(["broad","sectoral","strategy"] as const).map((g) => (
+              <optgroup key={g} label={g === "broad" ? "Broad Market" : g === "sectoral" ? "Sectoral" : "Volatility & Strategy"}>
+                {INDICES.filter((i) => i.group === g).map((i) => (
+                  <option key={i.key} value={i.key}>{i.name} ({i.exchange})</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        )}
 
         {/* Asset context card */}
         {mode === "stock" && pickedStock && (
@@ -395,22 +412,63 @@ function ForecastPage() {
           </div>
         )}
 
+        {/* Horizon Tier toggle */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Horizon tier:</span>
+          {(["short","long"] as const).map((t) => (
+            <button key={t} onClick={() => setTier(t)} data-active={tier === t}
+              className="px-3 py-1 text-xs rounded-full border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">
+              {t === "short" ? "Short-Term (1–90d)" : "Long-Term (6M–10Y)"}
+            </button>
+          ))}
+          <span className="text-[10px] text-muted-foreground ml-1">
+            {tier === "short" ? "Tactical pattern detection — 17 models" : "Structural projection — CAGR + Monte Carlo"}
+          </span>
+        </div>
+
         <div className="flex flex-col md:flex-row gap-2 flex-wrap items-stretch">
           <div className="flex gap-1 flex-wrap">
-            {SHORT_HORIZONS.map((h) => (
-              <button key={h} onClick={() => { setHorizon(h); setCustomHorizon(""); }} data-active={horizon === h && !customHorizon}
-                className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">{h}d</button>
-            ))}
+            {tier === "short"
+              ? SHORT_HORIZONS.map((h) => (
+                  <button key={h} onClick={() => { setHorizon(h); setCustomHorizon(""); }} data-active={horizon === h && !customHorizon}
+                    className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">{h}d</button>
+                ))
+              : LONG_HORIZONS.map((h) => (
+                  <button key={h.id} onClick={() => setLongHorizon(h.id)} data-active={longHorizon === h.id}
+                    className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">{h.label}</button>
+                ))}
           </div>
           <button
-            onClick={handleSearch}
-            disabled={loading || !query || (mode === "stock" ? !pickedStock : !pickedFund)}
+            onClick={runForTier}
+            disabled={loading || (mode === "stock" ? !pickedStock : mode === "fund" ? !pickedFund : !pickedIndex)}
             className="ml-auto px-4 py-2 rounded bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            {loading ? `Running ${progress.done}/${progress.total}…` : !query ? "Select a stock or fund to begin" : `Run ${selected.size} model${selected.size === 1 ? "" : "s"}`}
+            {loading
+              ? (tier === "short" ? `Running ${progress.done}/${progress.total}…` : "Simulating paths…")
+              : tier === "short"
+                ? `Run ${selected.size} model${selected.size === 1 ? "" : "s"}`
+                : `Run Long-Term Forecast`}
           </button>
         </div>
+
+        {tier === "long" && (
+          <div className="rounded border border-border bg-background/30 p-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label className="text-[11px] text-muted-foreground">CAGR adjustment: <span className="font-mono">{cagrAdjust >= 0 ? "+" : ""}{cagrAdjust}%</span></label>
+              <input type="range" min={-10} max={10} step={0.5} value={cagrAdjust}
+                onChange={(e) => setCagrAdjust(Number(e.target.value))} className="w-full" />
+              <div className="text-[10px] text-muted-foreground">Nudge the historical baseline up or down.</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input id="rebase" type="checkbox" checked={rebase} onChange={(e) => setRebase(e.target.checked)} />
+              <label htmlFor="rebase" className="cursor-pointer">Rebase to ₹1,00,000 (growth-of-lakh view)</label>
+            </div>
+            <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+              <History className="h-3 w-3" /> Long-horizon mode uses CAGR extrapolation + Monte Carlo simulation. Short-term-only ML models are disabled.
+            </div>
+          </div>
+        )}
 
         {/* Simple mode bundles */}
         {uiMode === "simple" && (
