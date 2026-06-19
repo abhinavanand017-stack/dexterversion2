@@ -144,6 +144,37 @@ function ForecastPage() {
     return horizon;
   }, [customHorizon, horizon]);
 
+  // Switching to long-term auto-prunes models that are meaningless multi-year.
+  useEffect(() => {
+    if (tier === "long") {
+      setSelected((prev) => {
+        const next = new Set(Array.from(prev).filter((id) => !SHORT_TERM_ONLY.has(id)));
+        if (next.size === 0) LONG_PRESET.forEach((id) => next.add(id));
+        return next;
+      });
+    }
+  }, [tier]);
+
+  async function loadPriceSeries(): Promise<{ bars: PriceBar[]; metaOut: typeof meta }> {
+    if (mode === "index") {
+      const idx = pickedIndex ? getIndex(pickedIndex) : null;
+      if (!idx) throw new Error("Pick an index from the dropdown");
+      // Long horizons want at least 5-10y of data so MC vol & CAGR are stable
+      const range = tier === "long" ? "10y" : "2y";
+      const r = await fetchYahooChart({ data: { symbol: idx.yahooSymbol, range, interval: "1d" } });
+      if (!r.ok || !r.bars.length) throw new Error(r.error || "No data for this index");
+      return { bars: r.bars.map((b) => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v })), metaOut: { name: idx.name, exchange: idx.exchange, currency: "₹" } };
+    }
+    if (mode === "stock") {
+      const r = await loadStock(query, "NS");
+      return { bars: r, metaOut: { name: query.toUpperCase(), exchange: "NSE", currency: "₹" } };
+    }
+    const code = Number(query);
+    if (!Number.isFinite(code)) throw new Error("Pick a fund from the dropdown");
+    const r = await loadFundNav(code);
+    return { bars: r.bars, metaOut: { name: r.meta?.scheme_name || `Scheme ${code}`, exchange: r.meta?.fund_house || "MF", currency: "₹" } };
+  }
+
   const handleSearch = async () => {
     if (selected.size === 0) {
       setError("Pick at least one model.");
@@ -152,28 +183,18 @@ function ForecastPage() {
     setLoading(true);
     setError(null);
     setResults([]);
+    setLongResult(null);
     setHiddenInChart(new Set());
     setProgress({ done: 0, total: selected.size });
     try {
-      let priceBars: PriceBar[];
-      if (mode === "stock") {
-        const r = await loadStock(query, "NS");
-        priceBars = r;
-        setMeta({ name: query.toUpperCase(), exchange: "NSE", currency: "₹" });
-      } else {
-        const code = Number(query);
-        if (!Number.isFinite(code)) throw new Error("Pick a fund from the dropdown");
-        const r = await loadFundNav(code);
-        priceBars = r.bars;
-        setMeta({ name: r.meta?.scheme_name || `Scheme ${code}`, exchange: r.meta?.fund_house || "MF", currency: "₹" });
-      }
-      // Apply lookback window
+      const { bars: priceBars, metaOut } = await loadPriceSeries();
+      setMeta(metaOut);
       const lb = LOOKBACKS.find((l) => l.id === lookback)?.days ?? 252;
       const trimmed = priceBars.slice(Math.max(0, priceBars.length - lb));
       setBars(trimmed);
       const rows = buildFeatures(trimmed);
       const collected: ModelResult[] = [];
-      const ids = Array.from(selected);
+      const ids = Array.from(selected).filter((id) => !SHORT_TERM_ONLY.has(id) || tier === "short");
       await runSelected(rows, effectiveHorizon, ids, (res, p) => {
         collected.push(res);
         setResults([...collected]);
@@ -186,11 +207,43 @@ function ForecastPage() {
     }
   };
 
+  const handleLongRun = async () => {
+    setLoading(true);
+    setError(null);
+    setResults([]);
+    setLongResult(null);
+    try {
+      const { bars: priceBars, metaOut } = await loadPriceSeries();
+      setMeta(metaOut);
+      setBars(priceBars);
+      const fundCagr = mode === "fund" && pickedFund ? undefined : undefined; // VR enrichment not yet wired into CuratedFund
+      const res = runLongTermForecast({
+        bars: priceBars,
+        horizon: longHorizon,
+        confidence: confidenceBand,
+        mcPaths,
+        cagrOverride: cagrAdjust || null,
+        fundCagr,
+      });
+      setLongResult(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const runForTier = () => (tier === "long" ? handleLongRun() : handleSearch());
+
   // sync `query` with picked asset so handleSearch + meta keep working
   useEffect(() => {
     if (mode === "stock" && pickedStock) setQuery(pickedStock.symbol);
     else if (mode === "fund" && pickedFund) setQuery(String(pickedFund.code));
-  }, [mode, pickedStock, pickedFund]);
+    else if (mode === "index" && pickedIndex) {
+      const idx = getIndex(pickedIndex);
+      if (idx) setQuery(idx.yahooSymbol);
+    }
+  }, [mode, pickedStock, pickedFund, pickedIndex]);
 
   // Simple mode → bundle of curated model ids
   const SIMPLE_BUNDLES: Record<string, string[]> = {
