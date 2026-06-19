@@ -336,7 +336,7 @@ function ForecastPage() {
 
         <div className="flex flex-col md:flex-row gap-2 flex-wrap items-stretch">
           <div className="flex gap-1 flex-wrap">
-            {HORIZONS.map((h) => (
+            {SHORT_HORIZONS.map((h) => (
               <button key={h} onClick={() => { setHorizon(h); setCustomHorizon(""); }} data-active={horizon === h && !customHorizon}
                 className="px-3 py-2 text-xs rounded border border-border data-[active=true]:bg-accent data-[active=true]:text-accent-foreground">{h}d</button>
             ))}
