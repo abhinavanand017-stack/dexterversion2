@@ -187,7 +187,10 @@ function ScreenerPage() {
       <header className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight dx-grad-text">Market Screener</h1>
-          <p className="text-xs text-muted-foreground font-mono">Showing {filtered.length} of {STOCK_UNIVERSE.length} stocks · NSE/BSE</p>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono flex-wrap">
+            <span>Showing {filtered.length} of {STOCK_UNIVERSE.length} stocks · NSE/BSE</span>
+            <LiveBadge status={liveStatus} fetchedAt={fetchedAt} source="Yahoo Finance / Marketstack" />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <input value={textSearch} onChange={(e) => { setTextSearch(e.target.value); setPage(0); }} placeholder="Search by name or symbol…" className="bg-card/60 border border-border rounded px-3 py-1.5 text-sm font-mono w-56 outline-none focus:border-primary" />
