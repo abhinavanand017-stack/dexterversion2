@@ -22,7 +22,6 @@ import { Route as PitchRouteImport } from './routes/pitch'
 import { Route as OptimizerRouteImport } from './routes/optimizer'
 import { Route as NewsRouteImport } from './routes/news'
 import { Route as IndicesRouteImport } from './routes/indices'
-import { Route as IndicesRouteImport } from './routes/indices'
 import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as FundsRouteImport } from './routes/funds'
 import { Route as ForecastRouteImport } from './routes/forecast'
@@ -91,11 +90,6 @@ const OptimizerRoute = OptimizerRouteImport.update({
 const NewsRoute = NewsRouteImport.update({
   id: '/news',
   path: '/news',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndicesRoute = IndicesRouteImport.update({
-  id: '/indices',
-  path: '/indices',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndicesRoute = IndicesRouteImport.update({

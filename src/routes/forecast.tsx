@@ -1,29 +1,37 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info, Settings2 } from "lucide-react";
+import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info, Settings2, Clock, History } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, BarChart, Bar as RBar } from "recharts";
 import { buildFeatures } from "@/lib/forecast/features";
 import { runSelected, MODEL_SPECS, type ModelResult, type ModelSpec } from "@/lib/forecast/models";
 import { computeConsensus, type Consensus } from "@/lib/forecast/consensus";
 import { loadStock, loadFundNav } from "@/lib/forecast/data";
 import type { Bar as PriceBar } from "@/lib/forecast/features";
+import { runLongTermForecast, LONG_HORIZONS, cagrSourceLabel, type LongHorizon, type LongTermResult } from "@/lib/forecast/longterm";
 import { StockCombobox, FundCombobox } from "@/components/AssetCombobox";
 import { NIFTY500, type NiftyStock } from "@/lib/nifty500";
 import { FUND_UNIVERSE, FUND_CATEGORY_LABELS, type CuratedFund } from "@/lib/fundUniverse";
+import { INDICES, getIndex } from "@/lib/indices";
+import { fetchYahooChart } from "@/lib/yahoo.functions";
 
 export const Route = createFileRoute("/forecast")({
+  validateSearch: (s: Record<string, unknown>) => ({
+    index: typeof s.index === "string" ? s.index : undefined,
+    tier: s.tier === "long" || s.tier === "short" ? s.tier : undefined,
+  }),
   head: () => ({
     meta: [
-      { title: "Dexter Forecaster — Customizable Multi-Model Engine" },
-      { name: "description", content: "Algorithmic forecasting engine for Indian stocks and mutual funds. Pick the models, the lookback, and the confidence band." },
+      { title: "Dexter Forecaster — Short & Long-Term Multi-Model Engine" },
+      { name: "description", content: "Tactical 1–90 day forecasts plus CAGR + Monte Carlo long-term projections for Indian stocks, funds, and indices." },
     ],
   }),
   component: ForecastPage,
 });
 
-type Mode = "stock" | "fund";
+type Mode = "stock" | "fund" | "index";
+type Tier = "short" | "long";
 
-const HORIZONS = [7, 15, 30, 60, 90];
+const SHORT_HORIZONS = [7, 15, 30, 60, 90];
 const LOOKBACKS = [
   { id: "6m", label: "6 months", days: 130 },
   { id: "1y", label: "1 year", days: 252 },
@@ -31,6 +39,10 @@ const LOOKBACKS = [
   { id: "5y", label: "5 years", days: 1260 },
 ];
 const CONFIDENCE_BANDS = [80, 90, 95] as const;
+
+// Short-term-only models — disabled in long-term mode (multi-year forecasts).
+const SHORT_TERM_ONLY = new Set(["svr", "knn", "cnn1d", "wavenet", "transformer"]);
+const LONG_PRESET = ["arima", "prophet", "ensemble", "mc"];
 
 const PRESET_RECOMMENDED = MODEL_SPECS.filter((s) => s.recommended).map((s) => s.id);
 const PRESET_ALL = MODEL_SPECS.map((s) => s.id);
