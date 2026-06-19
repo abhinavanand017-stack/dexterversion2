@@ -286,7 +286,12 @@ function ScreenerPage() {
                       </td>
                       <td className="px-2 py-2 text-xs">{s.sector}</td>
                       <td className="px-2 py-2 text-right font-mono">
-                        <div>₹{s.price.toLocaleString("en-IN")}</div>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <span>₹{s.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>
+                          {quotes[`${s.symbol}.NS`] && (
+                            <span className={`h-1 w-1 rounded-full ${quotes[`${s.symbol}.NS`].status === "live" ? "bg-emerald-400" : quotes[`${s.symbol}.NS`].status === "delayed" ? "bg-amber-400" : "bg-rose-400"}`} />
+                          )}
+                        </div>
                         <Sparkline symbol={s.symbol} color={s.revenueGrowth >= 0 ? "#22c55e" : "#ef4444"} />
                       </td>
                       <td className="px-2 py-2 text-right font-mono text-xs">{fmtCr(s.marketCap)}</td>
@@ -300,7 +305,11 @@ function ScreenerPage() {
                         {"★".repeat(s.rating)}<span className="text-muted-foreground/30">{"★".repeat(5 - s.rating)}</span>
                       </td>
                       <td className="px-2 py-2 text-center">
-                        <button onClick={(e) => { e.stopPropagation(); add(s.symbol); }} className="text-amber-400 hover:scale-110 transition"><Star className="h-3.5 w-3.5" /></button>
+                        <div className="inline-flex items-center gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); add(s.symbol); toast.success(`${s.symbol} added to watchlist`); }} title="Add to Watchlist" className="text-amber-400 hover:scale-110 transition"><Star className="h-3.5 w-3.5" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); toggleCompare(s); }} title="Compare" className={"hover:scale-110 transition " + (compare.find((x) => x.symbol === s.symbol) ? "text-primary" : "text-muted-foreground")}><BarChart3 className="h-3.5 w-3.5" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); navigate({ to: "/forecast", search: { symbol: s.symbol } as never }); }} title="Forecast" className="text-cyan-400 hover:scale-110 transition"><Sparkles className="h-3.5 w-3.5" /></button>
+                        </div>
                       </td>
                     </tr>
                   );
