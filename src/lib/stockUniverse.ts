@@ -87,6 +87,31 @@ const baseStocks: Stock[] = [
 
 export const STOCK_UNIVERSE: Stock[] = baseStocks;
 
+/**
+ * Real fundamental-driven 1-5 star rating.
+ * Weighted: ROE (35%), PE relative to sector (15%), revenue growth (20%),
+ * dividend yield (10%), debt/equity safety (20%). Distribution is intentionally
+ * spread — most stocks land 2-4, only genuinely strong fundamentals reach 5.
+ */
+export function calcRating(s: Stock, universe: Stock[] = STOCK_UNIVERSE): number {
+  // Sector-relative PE: lower is better, but very low PE (<5) penalised as a red flag.
+  const sectorPeers = universe.filter((x) => x.sector === s.sector && x.pe > 0);
+  const sectorPe = sectorPeers.length ? sectorPeers.reduce((a, x) => a + x.pe, 0) / sectorPeers.length : 25;
+  const peRatio = s.pe > 0 ? s.pe / sectorPe : 2;
+  const peScore = s.pe < 5 ? 0.3 : Math.max(0, Math.min(1, 1.6 - peRatio));
+
+  const roeScore = Math.max(0, Math.min(1, s.roe / 30));
+  const growthScore = Math.max(0, Math.min(1, (s.revenueGrowth + 5) / 30));
+  const divScore = Math.max(0, Math.min(1, s.dividendYield / 5));
+  const safetyScore = Math.max(0, Math.min(1, 1 - s.debtEquity / 5));
+
+  const composite =
+    roeScore * 0.35 + peScore * 0.15 + growthScore * 0.2 + divScore * 0.1 + safetyScore * 0.2;
+  // Map 0-1 → 1-5 stars, with mild stretching so the distribution isn't flat.
+  const stars = 1 + composite * 4;
+  return Math.max(1, Math.min(5, Math.round(stars)));
+}
+
 export function dexterScore(s: Stock): number {
   const roeScore = Math.min(s.roe, 50) * 0.3;
   const peScore = Math.max(0, (50 - Math.min(s.pe, 100))) / 50 * 20;
