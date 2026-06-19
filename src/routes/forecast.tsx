@@ -503,7 +503,7 @@ function ForecastPage() {
                   <div className="flex flex-wrap gap-1.5">
                     {models.map((m) => {
                       const on = selected.has(m.id);
-                      const disabled = tier === "long" && SHORT_TERM_ONLY.has(m.id);
+                      const disabled = SHORT_TERM_ONLY.has(m.id) && (tier as Tier) === "long";
                       return (
                         <button key={m.id} onClick={() => !disabled && toggleModel(m.id)}
                           title={disabled ? "Disabled for multi-year horizons — designed for short-term patterns." : m.tooltip}
