@@ -174,7 +174,13 @@ export const getYahooQuotes = createServerFn({ method: "GET" }).handler(
     if (cache.current && now - cache.current.ts < CACHE_TTL_MS) {
       return { ok: true, quotes: cache.current.quotes, ts: cache.current.ts, source: cache.current.source, ageMs: now - cache.current.ts };
     }
-    // 1) Yahoo (3 parallel)
+    // 1) NSE official (cookie-bootstrapped)
+    const nse = await fetchNseIndices();
+    if (nse.length >= 2) {
+      cache.current = { ts: now, quotes: nse, source: "nse" };
+      return { ok: true, quotes: nse, ts: now, source: "nse", ageMs: 0 };
+    }
+    // 2) Yahoo (3 parallel)
     const yahoo = (await Promise.all(["nifty", "sensex", "vix"].map(fetchYahooOne))).filter((q): q is YahooQuote => q !== null);
     if (yahoo.length >= 2) {
       cache.current = { ts: now, quotes: yahoo, source: "yahoo" };
