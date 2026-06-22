@@ -138,7 +138,8 @@ async function fetchYahooOne(key: string): Promise<YahooQuote | null> {
 }
 
 async function fetchMarketstack(): Promise<YahooQuote[]> {
-  const KEY = process.env.MARKETSTACK_KEY || "027d0001e4266af178794333600e13f3";
+  const KEY = process.env.MARKETSTACK_KEY;
+  if (!KEY) return [];
   try {
     const symbols = Object.values(MS_MAP).join(",");
     const url = `https://api.marketstack.com/v1/eod/latest?access_key=${KEY}&symbols=${symbols}`;
