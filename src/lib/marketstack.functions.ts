@@ -23,6 +23,8 @@ const FALLBACK: MSQuote[] = [
 
 export const getMarketstackTicker = createServerFn({ method: "GET" }).handler(
   async (): Promise<{ ok: boolean; quotes: MSQuote[]; cached: boolean }> => {
+    const KEY = process.env.MARKETSTACK_KEY;
+    if (!KEY) return { ok: true, quotes: FALLBACK, cached: true };
     try {
       const url = `https://api.marketstack.com/v1/eod/latest?access_key=${KEY}&symbols=NSEI.INDX,BSESN.INDX,NSEBANK.INDX,CNXIT.INDX,NIFMDCP100.INDX`;
       const ctrl = new AbortController();
