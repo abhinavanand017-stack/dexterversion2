@@ -9,14 +9,17 @@ export interface NewsItem {
   image?: string;
 }
 
-const NEWSAPI_KEY = "b79fc20132b0b5158a210fe7d256fed";
-const NEWSAPI_URL = `https://newsapi.org/v2/everything?q=india+stock+market+NSE+BSE&language=en&sortBy=publishedAt&apiKey=${NEWSAPI_KEY}`;
-
 let cache: { ts: number; items: NewsItem[] } | null = null;
 const TTL = 10 * 60 * 1000;
 
 export const getNews = createServerFn({ method: "GET" }).handler(async (): Promise<{ ok: boolean; items: NewsItem[]; error?: string }> => {
   if (cache && Date.now() - cache.ts < TTL) return { ok: true, items: cache.items };
+  const NEWSAPI_KEY = process.env.NEWSAPI_KEY;
+  if (!NEWSAPI_KEY) {
+    if (cache) return { ok: true, items: cache.items };
+    return { ok: false, items: [], error: "NEWSAPI_KEY not configured" };
+  }
+  const NEWSAPI_URL = `https://newsapi.org/v2/everything?q=india+stock+market+NSE+BSE&language=en&sortBy=publishedAt&apiKey=${NEWSAPI_KEY}`;
   try {
     const res = await fetch(NEWSAPI_URL, { headers: { "User-Agent": "Dexter/1.0" } });
     if (!res.ok) {
