@@ -30,9 +30,7 @@ export const getAngelQuotes = createServerFn({ method: "GET" }).handler(
   },
 );
 
-export const getFinnhubToken = createServerFn({ method: "GET" }).handler(
-  async (): Promise<{ token: string | null }> => {
-    const token = process.env.FINNHUB_KEY ?? null;
-    return { token };
-  },
-);
+// NOTE: A previous getFinnhubToken server function returned FINNHUB_KEY to the
+// browser, exposing it in the WebSocket handshake URL. Removed for security.
+// To restore live Finnhub data, proxy the WebSocket or REST calls server-side
+// and forward only price ticks to the client.
