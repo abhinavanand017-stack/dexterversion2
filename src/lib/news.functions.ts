@@ -1,58 +1,41 @@
 import { createServerFn } from "@tanstack/react-start";
 
-const FEEDS: Record<string, string> = {
-  markets: "https://www.moneycontrol.com/rss/marketreports.xml",
-  economy: "https://www.moneycontrol.com/rss/economy.xml",
-  mutualfunds: "https://www.moneycontrol.com/rss/mutualfunds.xml",
-  ipo: "https://www.moneycontrol.com/rss/iponews.xml",
-  commodities: "https://www.moneycontrol.com/rss/commodities.xml",
-};
-
 export interface NewsItem {
   title: string;
-  link: string;
-  pubDate: string;
-  category: string;
+  description: string;
+  url: string;
+  source: string;
+  publishedAt: string;
+  image?: string;
 }
 
-function parseRss(xml: string, category: string): NewsItem[] {
-  const items: NewsItem[] = [];
-  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-  let m: RegExpExecArray | null;
-  while ((m = itemRegex.exec(xml)) !== null) {
-    const block = m[1];
-    const get = (tag: string) => {
-      const r = new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?<\\/${tag}>`).exec(block);
-      return r ? r[1].trim() : "";
-    };
-    items.push({
-      title: get("title"),
-      link: get("link"),
-      pubDate: get("pubDate"),
-      category,
-    });
-  }
-  return items;
-}
+const NEWSAPI_KEY = "b79fc20132b0b5158a210fe7d256fed";
+const NEWSAPI_URL = `https://newsapi.org/v2/everything?q=india+stock+market+NSE+BSE&language=en&sortBy=publishedAt&apiKey=${NEWSAPI_KEY}`;
 
 let cache: { ts: number; items: NewsItem[] } | null = null;
-const TTL = 5 * 60 * 1000;
+const TTL = 10 * 60 * 1000;
 
-export const getNews = createServerFn({ method: "GET" }).handler(async () => {
-  if (cache && Date.now() - cache.ts < TTL) return cache.items;
-  const results = await Promise.all(
-    Object.entries(FEEDS).map(async ([cat, url]) => {
-      try {
-        const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-        if (!res.ok) return [];
-        const xml = await res.text();
-        return parseRss(xml, cat);
-      } catch {
-        return [];
-      }
-    })
-  );
-  const merged = results.flat().sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
-  cache = { ts: Date.now(), items: merged };
-  return merged;
+export const getNews = createServerFn({ method: "GET" }).handler(async (): Promise<{ ok: boolean; items: NewsItem[]; error?: string }> => {
+  if (cache && Date.now() - cache.ts < TTL) return { ok: true, items: cache.items };
+  try {
+    const res = await fetch(NEWSAPI_URL, { headers: { "User-Agent": "Dexter/1.0" } });
+    if (!res.ok) {
+      if (cache) return { ok: true, items: cache.items };
+      return { ok: false, items: [], error: `HTTP ${res.status}` };
+    }
+    const json = await res.json() as { articles?: Array<{ title: string; description: string; url: string; urlToImage: string; publishedAt: string; source: { name: string } }> };
+    const items: NewsItem[] = (json.articles || []).filter((a) => a.title && a.title !== "[Removed]").map((a) => ({
+      title: a.title,
+      description: a.description || "",
+      url: a.url,
+      image: a.urlToImage || undefined,
+      publishedAt: a.publishedAt,
+      source: a.source?.name || "NewsAPI",
+    }));
+    cache = { ts: Date.now(), items };
+    return { ok: true, items };
+  } catch (e) {
+    if (cache) return { ok: true, items: cache.items };
+    return { ok: false, items: [], error: e instanceof Error ? e.message : "fetch failed" };
+  }
 });

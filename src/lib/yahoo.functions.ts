@@ -17,7 +17,70 @@ export interface YahooBar {
   v: number;
 }
 
-export type QuoteSource = "yahoo" | "marketstack" | "twelvedata" | "cached" | "seed";
+export type QuoteSource = "nse" | "yahoo" | "marketstack" | "twelvedata" | "cached" | "seed";
+
+const NSE_INDEX_MAP: Record<string, string> = {
+  nifty: "NIFTY 50",
+  sensex: "S&P BSE SENSEX",
+  vix: "INDIA VIX",
+};
+
+let nseCookie: { value: string; ts: number } | null = null;
+async function getNseCookie(): Promise<string> {
+  if (nseCookie && Date.now() - nseCookie.ts < 5 * 60 * 1000) return nseCookie.value;
+  const r = await withTimeout(fetch("https://www.nseindia.com", { headers: BROWSER_HEADERS }), 5000);
+  const sc = r.headers.get("set-cookie") || "";
+  const cookies = sc.split(/,(?=[^;]+?=)/).map((c) => c.split(";")[0].trim()).filter(Boolean).join("; ");
+  nseCookie = { value: cookies, ts: Date.now() };
+  return cookies;
+}
+
+async function fetchNseIndices(): Promise<YahooQuote[]> {
+  try {
+    const cookie = await getNseCookie();
+    const res = await withTimeout(fetch("https://www.nseindia.com/api/allIndices", {
+      headers: { ...BROWSER_HEADERS, Referer: "https://www.nseindia.com/", Cookie: cookie },
+    }), 5000);
+    if (!res.ok) return [];
+    const json = await res.json() as { data?: Array<{ index: string; last: number; variation: number; percentChange: number; previousClose: number }> };
+    const byName: Record<string, { last: number; variation: number; percentChange: number; previousClose: number }> = {};
+    for (const d of json.data || []) byName[d.index] = d;
+    const out: YahooQuote[] = [];
+    for (const [k, idx] of Object.entries(NSE_INDEX_MAP)) {
+      const d = byName[idx];
+      if (!d) continue;
+      out.push({ symbol: k, price: d.last, prev: d.previousClose, change: d.variation, pct: d.percentChange });
+    }
+    return out;
+  } catch { return []; }
+}
+
+export async function fetchNseAllIndices(): Promise<Array<{ index: string; last: number; variation: number; percentChange: number; previousClose: number }>> {
+  try {
+    const cookie = await getNseCookie();
+    const res = await withTimeout(fetch("https://www.nseindia.com/api/allIndices", {
+      headers: { ...BROWSER_HEADERS, Referer: "https://www.nseindia.com/", Cookie: cookie },
+    }), 5000);
+    if (!res.ok) return [];
+    const json = await res.json() as { data?: Array<{ index: string; last: number; variation: number; percentChange: number; previousClose: number }> };
+    return json.data || [];
+  } catch { return []; }
+}
+
+export const getNseStockIndex = createServerFn({ method: "GET" })
+  .inputValidator((input: { index?: string }) => ({ index: input.index || "NIFTY 500" }))
+  .handler(async ({ data }) => {
+    try {
+      const cookie = await getNseCookie();
+      const url = `https://www.nseindia.com/api/equity-stockIndices?index=${encodeURIComponent(data.index)}`;
+      const res = await withTimeout(fetch(url, {
+        headers: { ...BROWSER_HEADERS, Referer: "https://www.nseindia.com/", Cookie: cookie },
+      }), 6000);
+      if (!res.ok) return { ok: false, data: [] as Array<{ symbol: string; lastPrice: number; pChange: number; meta?: { industry?: string; companyName?: string } }> };
+      const json = await res.json() as { data?: Array<{ symbol: string; lastPrice: number; pChange: number; meta?: { industry?: string; companyName?: string } }> };
+      return { ok: true, data: json.data || [] };
+    } catch { return { ok: false, data: [] as Array<{ symbol: string; lastPrice: number; pChange: number; meta?: { industry?: string; companyName?: string } }> }; }
+  });
 
 const SYMBOL_MAP: Record<string, string> = {
   nifty: "%5ENSEI",
@@ -111,7 +174,13 @@ export const getYahooQuotes = createServerFn({ method: "GET" }).handler(
     if (cache.current && now - cache.current.ts < CACHE_TTL_MS) {
       return { ok: true, quotes: cache.current.quotes, ts: cache.current.ts, source: cache.current.source, ageMs: now - cache.current.ts };
     }
-    // 1) Yahoo (3 parallel)
+    // 1) NSE official (cookie-bootstrapped)
+    const nse = await fetchNseIndices();
+    if (nse.length >= 2) {
+      cache.current = { ts: now, quotes: nse, source: "nse" };
+      return { ok: true, quotes: nse, ts: now, source: "nse", ageMs: 0 };
+    }
+    // 2) Yahoo (3 parallel)
     const yahoo = (await Promise.all(["nifty", "sensex", "vix"].map(fetchYahooOne))).filter((q): q is YahooQuote => q !== null);
     if (yahoo.length >= 2) {
       cache.current = { ts: now, quotes: yahoo, source: "yahoo" };

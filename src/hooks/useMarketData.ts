@@ -43,7 +43,7 @@ export function useMarketData(pollMs = 15_000): MarketData {
         if (cancelled) return;
         const map = Object.fromEntries(res.quotes.map((q) => [q.symbol, q])) as Record<string, YahooQuote>;
         const now = Date.now();
-        const isLive = res.source === "yahoo" || res.source === "marketstack" || res.source === "twelvedata";
+        const isLive = res.source === "nse" || res.source === "yahoo" || res.source === "marketstack" || res.source === "twelvedata";
         setData({
           nifty: map.nifty ?? SEED.nifty,
           sensex: map.sensex ?? SEED.sensex,
