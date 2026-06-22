@@ -95,7 +95,7 @@ async function fetchYahooOne(rawSym: string): Promise<LiveQuote | null> {
 }
 
 async function fetchMarketstackBatch(rawSyms: string[]): Promise<Record<string, LiveQuote>> {
-  const KEY = process.env.MARKETSTACK_KEY || "027d0001e4266af178794333600e13f3";
+  const KEY = process.env.MARKETSTACK_KEY;
   if (!KEY || !rawSyms.length) return {};
   try {
     // Marketstack uses XNSE prefix-less symbols like "RELIANCE.XNSE"
