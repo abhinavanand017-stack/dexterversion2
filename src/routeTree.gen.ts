@@ -25,6 +25,7 @@ import { Route as IndicesRouteImport } from './routes/indices'
 import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as FundsRouteImport } from './routes/funds'
 import { Route as ForecastRouteImport } from './routes/forecast'
+import { Route as EtfsRouteImport } from './routes/etfs'
 import { Route as DematRouteImport } from './routes/demat'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as CommunityRouteImport } from './routes/community'
@@ -112,6 +113,11 @@ const ForecastRoute = ForecastRouteImport.update({
   path: '/forecast',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EtfsRoute = EtfsRouteImport.update({
+  id: '/etfs',
+  path: '/etfs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DematRoute = DematRouteImport.update({
   id: '/demat',
   path: '/demat',
@@ -150,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/community': typeof CommunityRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
+  '/etfs': typeof EtfsRoute
   '/forecast': typeof ForecastRoute
   '/funds': typeof FundsRoute
   '/goals': typeof GoalsRoute
@@ -174,6 +181,7 @@ export interface FileRoutesByTo {
   '/community': typeof CommunityRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
+  '/etfs': typeof EtfsRoute
   '/forecast': typeof ForecastRoute
   '/funds': typeof FundsRoute
   '/goals': typeof GoalsRoute
@@ -199,6 +207,7 @@ export interface FileRoutesById {
   '/community': typeof CommunityRoute
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
+  '/etfs': typeof EtfsRoute
   '/forecast': typeof ForecastRoute
   '/funds': typeof FundsRoute
   '/goals': typeof GoalsRoute
@@ -225,6 +234,7 @@ export interface FileRouteTypes {
     | '/community'
     | '/dashboard'
     | '/demat'
+    | '/etfs'
     | '/forecast'
     | '/funds'
     | '/goals'
@@ -249,6 +259,7 @@ export interface FileRouteTypes {
     | '/community'
     | '/dashboard'
     | '/demat'
+    | '/etfs'
     | '/forecast'
     | '/funds'
     | '/goals'
@@ -273,6 +284,7 @@ export interface FileRouteTypes {
     | '/community'
     | '/dashboard'
     | '/demat'
+    | '/etfs'
     | '/forecast'
     | '/funds'
     | '/goals'
@@ -298,6 +310,7 @@ export interface RootRouteChildren {
   CommunityRoute: typeof CommunityRoute
   DashboardRoute: typeof DashboardRoute
   DematRoute: typeof DematRoute
+  EtfsRoute: typeof EtfsRoute
   ForecastRoute: typeof ForecastRoute
   FundsRoute: typeof FundsRoute
   GoalsRoute: typeof GoalsRoute
@@ -430,6 +443,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForecastRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/etfs': {
+      id: '/etfs'
+      path: '/etfs'
+      fullPath: '/etfs'
+      preLoaderRoute: typeof EtfsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/demat': {
       id: '/demat'
       path: '/demat'
@@ -482,6 +502,7 @@ const rootRouteChildren: RootRouteChildren = {
   CommunityRoute: CommunityRoute,
   DashboardRoute: DashboardRoute,
   DematRoute: DematRoute,
+  EtfsRoute: EtfsRoute,
   ForecastRoute: ForecastRoute,
   FundsRoute: FundsRoute,
   GoalsRoute: GoalsRoute,
