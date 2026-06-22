@@ -61,6 +61,8 @@ export const getMarketstackTicker = createServerFn({ method: "GET" }).handler(
 export const getMarketstackEOD = createServerFn({ method: "GET" })
   .inputValidator((d: { symbol: string; limit?: number }) => d)
   .handler(async ({ data }): Promise<{ ok: boolean; bars: Array<{ date: string; open: number; high: number; low: number; close: number }>; cached: boolean }> => {
+    const KEY = process.env.MARKETSTACK_KEY;
+    if (!KEY) return { ok: false, bars: [], cached: true };
     try {
       const limit = data.limit ?? 252;
       const url = `https://api.marketstack.com/v1/eod?access_key=${KEY}&symbols=${encodeURIComponent(data.symbol)}&limit=${limit}`;
