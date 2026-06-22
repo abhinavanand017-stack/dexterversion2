@@ -6,8 +6,9 @@ import { formatNum } from "@/lib/formatINR";
 const LABELS: Record<string, string> = { nifty: "NIFTY 50", sensex: "SENSEX", vix: "INDIA VIX" };
 
 const SOURCE_META: Record<string, { color: string; label: string }> = {
+  nse:         { color: "#22c55e", label: "live · nse" },
   yahoo:       { color: "#22c55e", label: "live · yahoo" },
-  marketstack: { color: "#22c55e", label: "live · marketstack" },
+  marketstack: { color: "#f59e0b", label: "delayed · marketstack" },
   twelvedata:  { color: "#22c55e", label: "live · twelvedata" },
   cached:      { color: "#f59e0b", label: "cached" },
   seed:        { color: "#ef4444", label: "fallback" },
