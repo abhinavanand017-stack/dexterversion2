@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 
-const KEY = process.env.MARKETSTACK_KEY ?? "";
+
 
 export interface MSQuote {
   symbol: string;
