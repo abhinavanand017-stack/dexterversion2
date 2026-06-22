@@ -2,7 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   Home, BarChart3, Activity, Newspaper, Search, Eye, Target, Settings, Play, X, Menu, Brain,
-  LineChart, Calculator, Briefcase, Trophy, Receipt, Goal, Gauge,
+  LineChart, Calculator, Briefcase, Trophy, Receipt, Goal, Gauge, Coins, Grid3x3,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -15,6 +15,8 @@ export const NAV_ITEMS = [
   { to: "/indices", label: "Live Indices", icon: Gauge },
   { to: "/screener", label: "Market Screener", icon: LineChart },
   { to: "/funds", label: "Fund Screener", icon: Search },
+  { to: "/etfs", label: "ETFs", icon: Coins },
+  { to: "/heatmap", label: "Heatmap", icon: Grid3x3 },
   { to: "/portfolio", label: "Portfolio", icon: Briefcase },
   { to: "/sip", label: "SIP Calculator", icon: Calculator },
   { to: "/forecast", label: "Forecaster", icon: Brain },

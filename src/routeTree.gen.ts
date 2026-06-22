@@ -22,6 +22,7 @@ import { Route as PitchRouteImport } from './routes/pitch'
 import { Route as OptimizerRouteImport } from './routes/optimizer'
 import { Route as NewsRouteImport } from './routes/news'
 import { Route as IndicesRouteImport } from './routes/indices'
+import { Route as HeatmapRouteImport } from './routes/heatmap'
 import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as FundsRouteImport } from './routes/funds'
 import { Route as ForecastRouteImport } from './routes/forecast'
@@ -98,6 +99,11 @@ const IndicesRoute = IndicesRouteImport.update({
   path: '/indices',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HeatmapRoute = HeatmapRouteImport.update({
+  id: '/heatmap',
+  path: '/heatmap',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GoalsRoute = GoalsRouteImport.update({
   id: '/goals',
   path: '/goals',
@@ -160,6 +166,7 @@ export interface FileRoutesByFullPath {
   '/forecast': typeof ForecastRoute
   '/funds': typeof FundsRoute
   '/goals': typeof GoalsRoute
+  '/heatmap': typeof HeatmapRoute
   '/indices': typeof IndicesRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
@@ -185,6 +192,7 @@ export interface FileRoutesByTo {
   '/forecast': typeof ForecastRoute
   '/funds': typeof FundsRoute
   '/goals': typeof GoalsRoute
+  '/heatmap': typeof HeatmapRoute
   '/indices': typeof IndicesRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
@@ -211,6 +219,7 @@ export interface FileRoutesById {
   '/forecast': typeof ForecastRoute
   '/funds': typeof FundsRoute
   '/goals': typeof GoalsRoute
+  '/heatmap': typeof HeatmapRoute
   '/indices': typeof IndicesRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
@@ -238,6 +247,7 @@ export interface FileRouteTypes {
     | '/forecast'
     | '/funds'
     | '/goals'
+    | '/heatmap'
     | '/indices'
     | '/news'
     | '/optimizer'
@@ -263,6 +273,7 @@ export interface FileRouteTypes {
     | '/forecast'
     | '/funds'
     | '/goals'
+    | '/heatmap'
     | '/indices'
     | '/news'
     | '/optimizer'
@@ -288,6 +299,7 @@ export interface FileRouteTypes {
     | '/forecast'
     | '/funds'
     | '/goals'
+    | '/heatmap'
     | '/indices'
     | '/news'
     | '/optimizer'
@@ -314,6 +326,7 @@ export interface RootRouteChildren {
   ForecastRoute: typeof ForecastRoute
   FundsRoute: typeof FundsRoute
   GoalsRoute: typeof GoalsRoute
+  HeatmapRoute: typeof HeatmapRoute
   IndicesRoute: typeof IndicesRoute
   NewsRoute: typeof NewsRoute
   OptimizerRoute: typeof OptimizerRoute
@@ -422,6 +435,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndicesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/heatmap': {
+      id: '/heatmap'
+      path: '/heatmap'
+      fullPath: '/heatmap'
+      preLoaderRoute: typeof HeatmapRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/goals': {
       id: '/goals'
       path: '/goals'
@@ -506,6 +526,7 @@ const rootRouteChildren: RootRouteChildren = {
   ForecastRoute: ForecastRoute,
   FundsRoute: FundsRoute,
   GoalsRoute: GoalsRoute,
+  HeatmapRoute: HeatmapRoute,
   IndicesRoute: IndicesRoute,
   NewsRoute: NewsRoute,
   OptimizerRoute: OptimizerRoute,
