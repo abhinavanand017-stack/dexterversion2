@@ -67,6 +67,80 @@ export async function fetchNseAllIndices(): Promise<Array<{ index: string; last:
   } catch { return []; }
 }
 
+// === Ticker indices (NIFTY 50, SENSEX, NIFTY BANK, NIFTY IT, NIFTY MIDCAP 100, INDIA VIX) ===
+export interface IndexQuote {
+  symbol: string; name: string; price: number; prev: number; change: number; pct: number;
+}
+const TICKER_INDICES: Array<{ key: string; nse: string; yahoo?: string }> = [
+  { key: "NIFTY 50",         nse: "NIFTY 50",         yahoo: "%5ENSEI" },
+  { key: "SENSEX",           nse: "S&P BSE SENSEX",   yahoo: "%5EBSESN" },
+  { key: "NIFTY BANK",       nse: "NIFTY BANK",       yahoo: "%5ENSEBANK" },
+  { key: "NIFTY IT",         nse: "NIFTY IT" },
+  { key: "NIFTY MIDCAP 100", nse: "NIFTY MIDCAP 100" },
+  { key: "INDIA VIX",        nse: "INDIA VIX",        yahoo: "%5EINDIAVIX" },
+];
+
+type TickerCache = { ts: number; quotes: IndexQuote[]; source: "nse" | "yahoo" };
+const tickerCache: { current?: TickerCache } = {};
+
+async function fetchYahooIndex(sym: string): Promise<{ price: number; prev: number } | null> {
+  try {
+    const res = await withTimeout(
+      fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1m&range=1d`, { headers: BROWSER_HEADERS }),
+      4000,
+    );
+    if (!res.ok) return null;
+    const json = await res.json() as { chart?: { result?: Array<{ meta?: { regularMarketPrice?: number; previousClose?: number; chartPreviousClose?: number } }> } };
+    const meta = json.chart?.result?.[0]?.meta;
+    const price = meta?.regularMarketPrice;
+    const prev = meta?.previousClose ?? meta?.chartPreviousClose;
+    if (price == null || prev == null) return null;
+    return { price, prev };
+  } catch { return null; }
+}
+
+export const getIndicesTicker = createServerFn({ method: "GET" }).handler(
+  async (): Promise<{ ok: boolean; quotes: IndexQuote[]; source: "nse" | "yahoo" | "cached"; ts: number }> => {
+    const now = Date.now();
+    if (tickerCache.current && now - tickerCache.current.ts < CACHE_TTL_MS) {
+      return { ok: true, quotes: tickerCache.current.quotes, source: tickerCache.current.source, ts: tickerCache.current.ts };
+    }
+    // 1) NSE allIndices
+    const nseAll = await fetchNseAllIndices();
+    if (nseAll.length) {
+      const byName: Record<string, typeof nseAll[number]> = {};
+      for (const d of nseAll) byName[d.index] = d;
+      const quotes: IndexQuote[] = [];
+      for (const t of TICKER_INDICES) {
+        const d = byName[t.nse];
+        if (d) quotes.push({ symbol: t.key, name: t.key, price: d.last, prev: d.previousClose, change: d.variation, pct: d.percentChange });
+      }
+      if (quotes.length >= 3) {
+        tickerCache.current = { ts: now, quotes, source: "nse" };
+        return { ok: true, quotes, source: "nse", ts: now };
+      }
+    }
+    // 2) Yahoo fallback (NIFTY 50, SENSEX, NIFTY BANK, INDIA VIX)
+    const yEntries = TICKER_INDICES.filter((t) => t.yahoo);
+    const yResults = await Promise.all(yEntries.map((t) => fetchYahooIndex(t.yahoo!)));
+    const yquotes: IndexQuote[] = [];
+    yEntries.forEach((t, i) => {
+      const r = yResults[i];
+      if (!r) return;
+      yquotes.push({ symbol: t.key, name: t.key, price: r.price, prev: r.prev, change: r.price - r.prev, pct: ((r.price - r.prev) / r.prev) * 100 });
+    });
+    if (yquotes.length >= 2) {
+      tickerCache.current = { ts: now, quotes: yquotes, source: "yahoo" };
+      return { ok: true, quotes: yquotes, source: "yahoo", ts: now };
+    }
+    // 3) Stale cache
+    if (tickerCache.current) {
+      return { ok: true, quotes: tickerCache.current.quotes, source: "cached", ts: tickerCache.current.ts };
+    }
+    return { ok: false, quotes: [], source: "cached", ts: now };
+  },
+);
+
 export const getNseStockIndex = createServerFn({ method: "GET" })
   .inputValidator((input: { index?: string }) => ({ index: input.index || "NIFTY 500" }))
   .handler(async ({ data }) => {
