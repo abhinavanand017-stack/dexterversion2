@@ -77,12 +77,13 @@ export const useDexterState = create<DexterState>()(
     }),
     {
       name: "dexter-state",
-      version: 2,
-      migrate: (persisted: any, version) => {
-        if (version < 2 && persisted) persisted.demoMode = false;
+      version: 3,
+      migrate: (persisted: any) => {
+        if (persisted) persisted.demoMode = false;
         return persisted;
       },
-      partialize: (s) => ({ demoMode: s.demoMode, uiMode: s.uiMode, bioSource: s.bioSource }),
+      // demoMode intentionally NOT persisted — always defaults to false on load
+      partialize: (s) => ({ uiMode: s.uiMode, bioSource: s.bioSource }),
     },
   ),
 );
