@@ -59,7 +59,7 @@ export const useDexterState = create<DexterState>()(
       scoreTrend: 3,
       uiMode: "full",
       circuitBreakerActive: false,
-      demoMode: true,
+      demoMode: false,
       bioSource: "demo",
       manualBio: { hrv: 58, hr: 72, sleep: 78, stress: 0.2 },
       dataHealth: "live",
@@ -77,6 +77,11 @@ export const useDexterState = create<DexterState>()(
     }),
     {
       name: "dexter-state",
+      version: 2,
+      migrate: (persisted: any, version) => {
+        if (version < 2 && persisted) persisted.demoMode = false;
+        return persisted;
+      },
       partialize: (s) => ({ demoMode: s.demoMode, uiMode: s.uiMode, bioSource: s.bioSource }),
     },
   ),
