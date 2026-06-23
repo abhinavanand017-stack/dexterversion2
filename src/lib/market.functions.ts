@@ -25,7 +25,7 @@ export const getAngelQuotes = createServerFn({ method: "GET" }).handler(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[getAngelQuotes] failed:", msg);
-      return { ok: false, source: "error", quotes: [], error: msg };
+      return { ok: false, source: "error", quotes: [], error: "Market data temporarily unavailable" };
     }
   },
 );
