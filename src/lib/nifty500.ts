@@ -281,6 +281,7 @@ export const NIFTY500: NiftyStock[] = [
   { symbol: "LATENTVIEW", name: "Latent View Analytics", sector: "IT", bucket: "smallcap250" },
   { symbol: "LICHSGFIN", name: "LIC Housing Finance", sector: "NBFC", bucket: "smallcap250" },
   { symbol: "LTTS", name: "L&T Technology Services", sector: "IT", bucket: "smallcap250" },
+__INSERT_HERE__
 ];
 
 export const BUCKET_LABEL: Record<IndexBucket, string> = {
