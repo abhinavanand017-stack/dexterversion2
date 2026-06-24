@@ -288,6 +288,7 @@ export const BUCKET_LABEL: Record<IndexBucket, string> = {
   next50: "Nifty Next 50",
   midcap150: "Nifty Midcap 150",
   smallcap250: "Nifty Smallcap 250",
+  nifty500: "Nifty 500 (extended)",
 };
 
 export function searchStocks(query: string, limit = 50): NiftyStock[] {
