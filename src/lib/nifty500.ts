@@ -2,7 +2,7 @@
 // Sourced from Nifty index factsheets (niftyindices.com). Static seed for the
 // asset picker; live pricing flows through the existing Yahoo→Marketstack chain.
 
-export type IndexBucket = "nifty50" | "next50" | "midcap150" | "smallcap250";
+export type IndexBucket = "nifty50" | "next50" | "midcap150" | "smallcap250" | "nifty500";
 
 export interface NiftyStock {
   symbol: string;        // NSE symbol (without suffix)
