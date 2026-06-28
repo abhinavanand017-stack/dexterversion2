@@ -105,7 +105,7 @@ export const getIndicesTicker = createServerFn({ method: "GET" }).handler(
     if (tickerCache.current && now - tickerCache.current.ts < CACHE_TTL_MS) {
       return { ok: true, quotes: tickerCache.current.quotes, source: tickerCache.current.source, ts: tickerCache.current.ts };
     }
-    // 1) NSE allIndices
+    // 1) NSE allIndices (no SENSEX — supplement from Yahoo)
     const nseAll = await fetchNseAllIndices();
     if (nseAll.length) {
       const byName: Record<string, typeof nseAll[number]> = {};
@@ -114,6 +114,16 @@ export const getIndicesTicker = createServerFn({ method: "GET" }).handler(
       for (const t of TICKER_INDICES) {
         const d = byName[t.nse];
         if (d) quotes.push({ symbol: t.key, name: t.key, price: d.last, prev: d.previousClose, change: d.variation, pct: d.percentChange });
+      }
+      // Fill any missing ticker indices (notably SENSEX) from Yahoo
+      const present = new Set(quotes.map((q) => q.symbol));
+      const missing = TICKER_INDICES.filter((t) => t.yahoo && !present.has(t.key));
+      if (missing.length) {
+        const filled = await Promise.all(missing.map((t) => fetchYahooIndex(t.yahoo!)));
+        missing.forEach((t, i) => {
+          const r = filled[i];
+          if (r) quotes.push({ symbol: t.key, name: t.key, price: r.price, prev: r.prev, change: r.price - r.prev, pct: ((r.price - r.prev) / r.prev) * 100 });
+        });
       }
       if (quotes.length >= 3) {
         tickerCache.current = { ts: now, quotes, source: "nse" };
