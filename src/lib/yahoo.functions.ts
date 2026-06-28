@@ -249,9 +249,14 @@ export const getYahooQuotes = createServerFn({ method: "GET" }).handler(
     if (cache.current && now - cache.current.ts < CACHE_TTL_MS) {
       return { ok: true, quotes: cache.current.quotes, ts: cache.current.ts, source: cache.current.source, ageMs: now - cache.current.ts };
     }
-    // 1) NSE official (cookie-bootstrapped)
+    // 1) NSE official (cookie-bootstrapped). NSE has no SENSEX — supplement from Yahoo.
     const nse = await fetchNseIndices();
     if (nse.length >= 2) {
+      const haveSensex = nse.some((q) => q.symbol === "sensex");
+      if (!haveSensex) {
+        const ys = await fetchYahooOne("sensex");
+        if (ys) nse.push(ys);
+      }
       cache.current = { ts: now, quotes: nse, source: "nse" };
       return { ok: true, quotes: nse, ts: now, source: "nse", ageMs: 0 };
     }
