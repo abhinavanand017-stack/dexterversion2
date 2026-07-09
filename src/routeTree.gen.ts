@@ -17,6 +17,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ScreenerRouteImport } from './routes/screener'
 import { Route as ScoreRouteImport } from './routes/score'
 import { Route as ScannerRouteImport } from './routes/scanner'
+import { Route as PortfolioAnalyserRouteImport } from './routes/portfolio-analyser'
 import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PitchRouteImport } from './routes/pitch'
 import { Route as OptimizerRouteImport } from './routes/optimizer'
@@ -72,6 +73,11 @@ const ScoreRoute = ScoreRouteImport.update({
 const ScannerRoute = ScannerRouteImport.update({
   id: '/scanner',
   path: '/scanner',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortfolioAnalyserRoute = PortfolioAnalyserRouteImport.update({
+  id: '/portfolio-analyser',
+  path: '/portfolio-analyser',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PortfolioRoute = PortfolioRouteImport.update({
@@ -172,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
   '/portfolio': typeof PortfolioRoute
+  '/portfolio-analyser': typeof PortfolioAnalyserRoute
   '/scanner': typeof ScannerRoute
   '/score': typeof ScoreRoute
   '/screener': typeof ScreenerRoute
@@ -198,6 +205,7 @@ export interface FileRoutesByTo {
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
   '/portfolio': typeof PortfolioRoute
+  '/portfolio-analyser': typeof PortfolioAnalyserRoute
   '/scanner': typeof ScannerRoute
   '/score': typeof ScoreRoute
   '/screener': typeof ScreenerRoute
@@ -225,6 +233,7 @@ export interface FileRoutesById {
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
   '/portfolio': typeof PortfolioRoute
+  '/portfolio-analyser': typeof PortfolioAnalyserRoute
   '/scanner': typeof ScannerRoute
   '/score': typeof ScoreRoute
   '/screener': typeof ScreenerRoute
@@ -253,6 +262,7 @@ export interface FileRouteTypes {
     | '/optimizer'
     | '/pitch'
     | '/portfolio'
+    | '/portfolio-analyser'
     | '/scanner'
     | '/score'
     | '/screener'
@@ -279,6 +289,7 @@ export interface FileRouteTypes {
     | '/optimizer'
     | '/pitch'
     | '/portfolio'
+    | '/portfolio-analyser'
     | '/scanner'
     | '/score'
     | '/screener'
@@ -305,6 +316,7 @@ export interface FileRouteTypes {
     | '/optimizer'
     | '/pitch'
     | '/portfolio'
+    | '/portfolio-analyser'
     | '/scanner'
     | '/score'
     | '/screener'
@@ -332,6 +344,7 @@ export interface RootRouteChildren {
   OptimizerRoute: typeof OptimizerRoute
   PitchRoute: typeof PitchRoute
   PortfolioRoute: typeof PortfolioRoute
+  PortfolioAnalyserRoute: typeof PortfolioAnalyserRoute
   ScannerRoute: typeof ScannerRoute
   ScoreRoute: typeof ScoreRoute
   ScreenerRoute: typeof ScreenerRoute
@@ -398,6 +411,13 @@ declare module '@tanstack/react-router' {
       path: '/scanner'
       fullPath: '/scanner'
       preLoaderRoute: typeof ScannerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portfolio-analyser': {
+      id: '/portfolio-analyser'
+      path: '/portfolio-analyser'
+      fullPath: '/portfolio-analyser'
+      preLoaderRoute: typeof PortfolioAnalyserRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/portfolio': {
@@ -532,6 +552,7 @@ const rootRouteChildren: RootRouteChildren = {
   OptimizerRoute: OptimizerRoute,
   PitchRoute: PitchRoute,
   PortfolioRoute: PortfolioRoute,
+  PortfolioAnalyserRoute: PortfolioAnalyserRoute,
   ScannerRoute: ScannerRoute,
   ScoreRoute: ScoreRoute,
   ScreenerRoute: ScreenerRoute,
@@ -544,13 +565,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
