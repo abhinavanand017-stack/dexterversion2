@@ -9,6 +9,16 @@ export interface NiftyStock {
   name: string;
   sector: string;
   bucket: IndexBucket;
+  // Optional seed fundamentals (Screener.in snapshot Jun 2026). Live price
+  // feed overrides `cmp`; the rest power Deep Research models 18–22.
+  cmp?: number;
+  pe?: number;
+  marCap?: number;       // ₹ crore
+  divYld?: number;       // %
+  roce?: number;         // %
+  qtrProfitVar?: number; // %
+  qtrSalesVar?: number;  // %
+  debtEquity?: number;
 }
 
 // ~250 names — covers Nifty 50 (50), Next 50 (50), top of Midcap 150 (~80), top of Smallcap 250 (~70).
@@ -547,6 +557,59 @@ export const NIFTY500: NiftyStock[] = [
   { symbol: "DCMSHRIRAM", name: "DCMSHRIRAM", sector: "Other", bucket: "nifty500" },
   { symbol: "RHIM", name: "RHIM", sector: "Other", bucket: "nifty500" },
   { symbol: "CANHLIFE", name: "CANHLIFE", sector: "Other", bucket: "nifty500" },
+
+  // ===== Added Jun 2026 (Screener.in seed fundamentals) =====
+  { symbol: "GVTD", name: "GE Vernova T&D India Ltd", sector: "Capital Goods", bucket: "midcap150", cmp: 4549.0, pe: 104.42, marCap: 116692.0, divYld: 0.11, roce: 54.74 },
+  { symbol: "LAURUS", name: "Laurus Labs Ltd", sector: "Pharma", bucket: "midcap150", cmp: 560.0, pe: 48.4, marCap: 30000.0, divYld: 0.2, roce: 14.8 },
+  { symbol: "SBICARDS", name: "SBI Cards & Payment Services Ltd", sector: "Financial", bucket: "midcap150", cmp: 750.0, pe: 28.4, marCap: 70000.0, divYld: 0.2, roce: 8.4 },
+  { symbol: "PNCINFRA", name: "PNC Infratech Ltd", sector: "Infrastructure", bucket: "midcap150", cmp: 430.0, pe: 14.4, marCap: 11000.0, divYld: 0.4, roce: 18.4 },
+  { symbol: "TANLA", name: "Tanla Platforms Ltd", sector: "IT", bucket: "smallcap250", cmp: 920.0 },
+  { symbol: "NUCLEUS", name: "Nucleus Software Exports Ltd", sector: "IT", bucket: "smallcap250", cmp: 1500.0 },
+  { symbol: "MASTEK", name: "Mastek Ltd", sector: "IT", bucket: "smallcap250", cmp: 2800.0 },
+  { symbol: "ZENSAR", name: "Zensar Technologies Ltd", sector: "IT", bucket: "smallcap250", cmp: 720.0 },
+  { symbol: "ROUTE", name: "Route Mobile Ltd", sector: "IT", bucket: "smallcap250", cmp: 1400.0 },
+  { symbol: "MSTROE", name: "Rategain Travel Technologies", sector: "IT", bucket: "smallcap250", cmp: 420.0 },
+  { symbol: "BIRLASOFT", name: "Birlasoft Ltd", sector: "IT", bucket: "smallcap250", cmp: 620.0 },
+  { symbol: "SOLARA", name: "Solara Active Pharma Sciences", sector: "Pharma", bucket: "smallcap250", cmp: 550.0 },
+  { symbol: "SUVEN", name: "Suven Pharmaceuticals Ltd", sector: "Pharma", bucket: "smallcap250", cmp: 1250.0 },
+  { symbol: "KRSNAA", name: "Krsnaa Diagnostics Ltd", sector: "Healthcare", bucket: "smallcap250", cmp: 620.0 },
+  { symbol: "ASTER", name: "Aster DM Healthcare Ltd", sector: "Healthcare", bucket: "smallcap250", cmp: 450.0 },
+  { symbol: "METROPOLIS", name: "Metropolis Healthcare Ltd", sector: "Healthcare", bucket: "smallcap250", cmp: 1850.0 },
+  { symbol: "FINEORG", name: "Fine Organic Industries Ltd", sector: "Chemicals", bucket: "smallcap250", cmp: 5000.0 },
+  { symbol: "AARTI", name: "Aarti Industries Ltd", sector: "Chemicals", bucket: "smallcap250", cmp: 550.0 },
+  { symbol: "NACLIND", name: "NACL Industries Ltd", sector: "Agrochemicals", bucket: "smallcap250", cmp: 168.0 },
+  { symbol: "SUPRAJIT", name: "Suprajit Engineering Ltd", sector: "Auto Ancillary", bucket: "smallcap250", cmp: 490.0 },
+  { symbol: "SUNDRMFAST", name: "Sundram Fasteners Ltd", sector: "Auto Ancillary", bucket: "smallcap250", cmp: 1350.0 },
+  { symbol: "SUBROS", name: "Subros Ltd", sector: "Auto Ancillary", bucket: "smallcap250", cmp: 650.0 },
+  { symbol: "ATHER", name: "Ather Energy Ltd", sector: "Auto", bucket: "smallcap250", cmp: 380.0 },
+  { symbol: "UJJIVANSFB", name: "Ujjivan Small Finance Bank", sector: "Banking", bucket: "smallcap250", cmp: 48.0 },
+  { symbol: "SURYODAY", name: "Suryoday Small Finance Bank", sector: "Banking", bucket: "smallcap250", cmp: 160.0 },
+  { symbol: "KARURVSYA", name: "Karur Vysya Bank Ltd", sector: "Banking", bucket: "smallcap250", cmp: 230.0 },
+  { symbol: "DCBBANK", name: "DCB Bank Ltd", sector: "Banking", bucket: "smallcap250", cmp: 140.0 },
+  { symbol: "5PAISA", name: "5Paisa Capital Ltd", sector: "Financial", bucket: "smallcap250", cmp: 430.0 },
+  { symbol: "PIRAMALFINANCE", name: "Piramal Finance Ltd", sector: "NBFC", bucket: "smallcap250", cmp: 350.0 },
+  { symbol: "KOLTEPATIL", name: "Kolte-Patil Developers Ltd", sector: "Realty", bucket: "smallcap250", cmp: 450.0 },
+  { symbol: "MAHLIFE", name: "Mahindra Lifespace Developers", sector: "Realty", bucket: "smallcap250", cmp: 500.0 },
+  { symbol: "ARVSMART", name: "Arvind SmartSpaces Ltd", sector: "Realty", bucket: "smallcap250", cmp: 620.0 },
+  { symbol: "KNR", name: "KNR Constructions Ltd", sector: "Infrastructure", bucket: "smallcap250", cmp: 380.0 },
+  { symbol: "HGINFRA", name: "H.G. Infra Engineering Ltd", sector: "Infrastructure", bucket: "smallcap250", cmp: 1250.0 },
+  { symbol: "AHLUCONT", name: "Ahluwalia Contracts India Ltd", sector: "Infrastructure", bucket: "smallcap250", cmp: 820.0 },
+  { symbol: "VSTIND", name: "VST Industries Ltd", sector: "FMCG", bucket: "smallcap250", cmp: 3500.0 },
+  { symbol: "PRATAAP", name: "Prataap Snacks Ltd", sector: "FMCG", bucket: "smallcap250", cmp: 1350.0 },
+  { symbol: "WESTLIFE", name: "Westlife Foodworld Ltd", sector: "Consumer", bucket: "smallcap250", cmp: 860.0 },
+  { symbol: "BARBEQUE", name: "Barbeque Nation Hospitality", sector: "Consumer", bucket: "smallcap250", cmp: 580.0 },
+  { symbol: "PARAS", name: "Paras Defence & Space Technologies", sector: "Defence", bucket: "smallcap250", cmp: 1200.0 },
+  { symbol: "IDEAFORGE", name: "ideaForge Technology Ltd", sector: "Defence", bucket: "smallcap250", cmp: 650.0 },
+  { symbol: "RATNAMANI", name: "Ratnamani Metals & Tubes Ltd", sector: "Metals", bucket: "smallcap250", cmp: 3700.0 },
+  { symbol: "MOIL", name: "MOIL Ltd", sector: "Metals", bucket: "smallcap250", cmp: 395.0 },
+  { symbol: "INDIGRID", name: "IndiGrid InvIT Fund", sector: "Utilities", bucket: "smallcap250", cmp: 180.0 },
+  { symbol: "EIH", name: "EIH Ltd (Oberoi Hotels)", sector: "Hospitality", bucket: "smallcap250", cmp: 380.0 },
+  { symbol: "RUPA", name: "Rupa & Company Ltd", sector: "Textiles", bucket: "smallcap250", cmp: 340.0 },
+  { symbol: "ARVIND", name: "Arvind Ltd", sector: "Textiles", bucket: "smallcap250", cmp: 280.0 },
+  { symbol: "TRIVENI", name: "Triveni Engineering & Industries", sector: "Sugar", bucket: "smallcap250", cmp: 480.0 },
+  { symbol: "DWARIKESH", name: "Dwarikesh Sugar Industries Ltd", sector: "Sugar", bucket: "smallcap250", cmp: 98.0 },
+  { symbol: "SENCO", name: "Senco Gold Ltd", sector: "Consumer", bucket: "smallcap250", cmp: 1100.0 },
+  { symbol: "RAJESHEXPO", name: "Rajesh Exports Ltd", sector: "Consumer", bucket: "smallcap250", cmp: 390.0 },
 ];
 
 export const BUCKET_LABEL: Record<IndexBucket, string> = {
