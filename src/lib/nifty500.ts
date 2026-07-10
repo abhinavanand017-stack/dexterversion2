@@ -9,6 +9,16 @@ export interface NiftyStock {
   name: string;
   sector: string;
   bucket: IndexBucket;
+  // Optional seed fundamentals (Screener.in snapshot Jun 2026). Live price
+  // feed overrides `cmp`; the rest power Deep Research models 18–22.
+  cmp?: number;
+  pe?: number;
+  marCap?: number;       // ₹ crore
+  divYld?: number;       // %
+  roce?: number;         // %
+  qtrProfitVar?: number; // %
+  qtrSalesVar?: number;  // %
+  debtEquity?: number;
 }
 
 // ~250 names — covers Nifty 50 (50), Next 50 (50), top of Midcap 150 (~80), top of Smallcap 250 (~70).
