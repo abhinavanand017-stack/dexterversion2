@@ -1,47 +1,48 @@
-# Dexter V2 — Phased Build Plan
+# Forecaster V2 — Universe + Deep Research + Accuracy
 
-This is a large spec (~3 parts, ~2000 lines of new code). I'll ship it in phases so the app stays working between turns. Each phase is a separate turn.
+Your pasted spec has 4 large parts. `src/lib/nifty500.ts` already ships **525 unique symbols** across Nifty 50 / Next 50 / Midcap 150 / Smallcap 250 buckets, so Part 1 is largely done and needs only a targeted top-up. The genuinely new work is Parts 2–4. Splitting into 3 turns keeps each turn under 1.5 credits.
 
-## Phase 1 — Foundation & Portfolio Analyser Core (this turn)
-- Install `xlsx` (SheetJS) via `bun add xlsx`.
-- Create `src/lib/portfolioAnalyser/` module: types, XIRR (Newton-Raphson), CAGR, GBM Monte Carlo, Holt-Winters, AR(1), Sharpe, portfolio metrics helpers.
-- Create `src/routes/portfolio-analyser.tsx` with:
-  - Tab A: Excel/CSV upload (drag-drop, SheetJS parse, validation, template download)
-  - Tab B: Manual entry table (reusing existing `AssetCombobox` and fund combobox)
-  - "Import from My Portfolio" (reads `dx_holdings_v2` localStorage)
-  - Save/Load to `portfolioAnalyser_v1` localStorage
-  - Multi-step progress indicator
-- Add nav entry between "Portfolio" and "SIP" in `AppSidebar`.
-- Sections A + B of the report: Portfolio Snapshot (value, P&L, XIRR, Sharpe, allocation donut, sector bar) + Individual Holdings Table.
+## Turn A — Universe top-up + Screener deeplink + Fundamentals snapshot
 
-## Phase 2 — Forecast, Risk, and AI Insights (next turn)
-- Section C: Portfolio Monte Carlo forecast with confidence cones (Recharts AreaChart), horizon toggles, per-holding forecast summary.
-- Section D: Risk Analysis — beta vs Nifty 50, max drawdown, correlation heatmap (SVG grid), concentration flags, volatility/return scatter.
-- Section E: AI Insights via new `src/lib/ai-insights.functions.ts` server function using Lovable AI Gateway + `google/gemini-2.5-flash`, streamed into a neon card.
-- Wire `/forecast?symbol=X&type=stock&horizon=long` deeplink handling in existing forecast route.
+Files touched: `src/lib/nifty500.ts`, `src/lib/screener.ts` (new), `src/routes/forecast.tsx`, `src/components/AssetCombobox.tsx`.
 
-## Phase 3 — SIP, Tax, Exports + Forecaster Expansion (following turn)
-- Section F: SIP Impact Simulator with slider.
-- Section G: Tax Estimation (STCG 20% / LTCG 12.5% >₹1.25L, ELSS lock-in, tax-loss harvesting).
-- Section H: Print-PDF, XLSX export, shareable URL.
-- Extend `src/lib/nifty500.ts` bucket type + add Next 50 (50 tickers), Midcap 100 (~75 new tickers not already present), Smallcap 250 (~200 tickers) as new bucket groups; wire into Forecaster combobox as collapsible groups.
+- Diff pasted spec against existing `NIFTY500`; append only missing symbols (est. 40–80 new). Keep the existing `NiftyStock` shape; add optional `cmp?`, `pe?`, `roce?`, `divYld?`, `marCap?`, `qtrProfitVar?`, `qtrSalesVar?`, `debtEquity?` fields on the seeded rows so Models 18–22 have data.
+- New `src/lib/screener.ts` exports `toScreenerUrl(symbol)` and `toYahooSymbol(symbol)` (URL-encodes `&`, `.`).
+- Forecast page: add "📊 Deep Research on Screener.in →" button next to the selected symbol (opens `screener.in/company/{SYMBOL}/consolidated/` in new tab), and a compact **Fundamentals Snapshot** card (PE / ROCE / DivYld / Qtr Profit Var / Debt/Equity) sourced from the seed data with graceful "—" when a field is missing.
 
-## Phase 4 — Python Backend Bridge & Model Info (final turn)
-- Add "API Mode" toggle + backend URL input to Forecaster settings (persisted to localStorage).
-- Client-side POST to `{backend_url}/forecast` when toggled on; overlay real model output alongside browser approximations, labelled.
-- Add ⓘ info panel with 17 model descriptions next to each model toggle.
+## Turn B — Deep Research models 18–22
+
+Files: `src/lib/forecast/deepResearch.ts` (new), `src/lib/forecast/models.ts` (register), `src/routes/forecast.tsx` (new "🔬 Deep Research" section in model grid + radar chart).
+
+- Model 18 DCF-Lite: fair value line + margin-of-safety band on the existing chart.
+- Model 19 Earnings Momentum: 0–100 gauge, adjusts price target.
+- Model 20 Bollinger Mean Reversion: bands overlay + reversion target.
+- Model 21 Relative Strength vs bucket index (Nifty 50 / Next 50 / Midcap 150).
+- Model 22 Composite Quant Score: pure-SVG hexagonal radar (6 axes), integrates outputs from 18–21 + existing consensus.
+- 3 manual override inputs (EPS, 5Y EPS CAGR %, Rev Growth %) that recompute Models 18/22 instantly.
+
+## Turn C — Accuracy & realism layer
+
+Files: `src/routes/forecast.tsx`, `src/lib/forecast/accuracy.ts` (new).
+
+- Remove any synthetic OHLCV fallback in the current forecast path; surface an explicit "⚠️ Could not fetch historical data" state instead of silent seeded data.
+- Per-model "±X%" historical-accuracy badge (static table from spec §4.2), colour-coded.
+- **Model Consensus** summary card (direction, P10–P90 range, median, agreement strength, plain-language sentence).
+- **Market Context** banner using existing VIX + Nifty 200 DMA signals.
+- **"How accurate were past forecasts?"** collapsible reading last 5 runs from a new `dx_forecast_history_v1` localStorage key (write on every forecast run).
+- Update disclaimer text per spec §technical notes.
+
+## Out of scope (unless you say otherwise)
+
+- Live scraping of Screener.in — spec explicitly forbids it; we deeplink + seed only.
+- Peer Comparison panel (§3.3) — cheap add-on, roll into Turn A if you want it.
+- Simple-Mode collapse of 18–22 into a single card — roll into Turn B if you want it.
 
 ## Technical notes
-- All heavy math runs client-side (no server compute cost) except the AI Insights call.
-- AI Insights: single non-streaming `generateText` call via `createLovableAiGatewayProvider` in a `createServerFn`, `google/gemini-2.5-flash`, max ~800 tokens. Uses aggregated portfolio summary only (no PII).
-- Historical price data reused from existing `yahoo.functions.ts` / `quotes.functions.ts` — no new data providers.
-- Preserves dark cyberpunk theme (existing `dx-*` classes, neon cyan/green).
-- Mobile-responsive with existing Tailwind breakpoints.
-- Excel template + export use SheetJS's `XLSX.utils.book_new` + `XLSX.writeFile`.
 
-## What's explicitly out of scope
-- No changes to existing 17-model forecaster UI beyond adding the API toggle + info tooltips.
-- No new Supabase tables — portfolios stay in localStorage per spec.
-- Smallcap 250 will ship with the ~45 named seed tickers + a curated subset to reach ~200 (full 250 NSE list requires manual data entry; can extend later).
+- Combobox already uses cmdk (virtualised) — no perf change needed at ~600 rows.
+- Radar in Turn B stays pure SVG (no new dep), reusing existing neon CSS vars.
+- All new localStorage writes wrapped in try/catch.
+- Zero changes to sidebar, routing, other pages, dark cyberpunk theme.
 
-Confirm to proceed with Phase 1.
+Reply **"go A"** (or B / C / all) and I'll start. Say "add peer panel" or "add simple-mode collapse" to fold those into their turn.
