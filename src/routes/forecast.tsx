@@ -952,3 +952,13 @@ function LongTermPanel({
     </div>
   );
 }
+
+function FundBit({ label, val, fmt }: { label: string; val: number | undefined; fmt: (v: number) => string }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase text-muted-foreground">{label}</div>
+      <div className="font-mono">{val != null ? fmt(val) : "—"}</div>
+    </div>
+  );
+}
+
