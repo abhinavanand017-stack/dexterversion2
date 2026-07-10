@@ -398,10 +398,33 @@ function ForecastPage() {
 
         {/* Asset context card */}
         {mode === "stock" && pickedStock && (
-          <div className="rounded border border-border bg-background/30 p-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-            <div><div className="text-[10px] uppercase text-muted-foreground">Symbol</div><div className="font-mono font-semibold">{pickedStock.symbol}</div></div>
-            <div><div className="text-[10px] uppercase text-muted-foreground">Sector</div><div>{pickedStock.sector}</div></div>
-            <div className="col-span-2 sm:col-span-2"><div className="text-[10px] uppercase text-muted-foreground">Company</div><div className="truncate">{pickedStock.name}</div></div>
+          <div className="space-y-2">
+            <div className="rounded border border-border bg-background/30 p-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <div><div className="text-[10px] uppercase text-muted-foreground">Symbol</div><div className="font-mono font-semibold">{pickedStock.symbol}</div></div>
+              <div><div className="text-[10px] uppercase text-muted-foreground">Sector</div><div>{pickedStock.sector}</div></div>
+              <div className="col-span-2 sm:col-span-2 flex items-center justify-between gap-2">
+                <div className="min-w-0"><div className="text-[10px] uppercase text-muted-foreground">Company</div><div className="truncate">{pickedStock.name}</div></div>
+                <a
+                  href={`https://www.screener.in/company/${encodeURIComponent(pickedStock.symbol)}/consolidated/`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="shrink-0 text-[10px] px-2 py-1 rounded border border-primary/50 text-primary hover:bg-primary/10 whitespace-nowrap"
+                >📊 Screener.in →</a>
+              </div>
+            </div>
+            {(pickedStock.pe != null || pickedStock.roce != null || pickedStock.divYld != null || pickedStock.marCap != null) && (
+              <div className="rounded border border-primary/30 bg-primary/5 p-3">
+                <div className="text-[10px] uppercase text-muted-foreground mb-1.5 flex items-center justify-between">
+                  <span>Fundamentals Snapshot <span className="text-[9px] opacity-60">(Screener.in · Jun 2026)</span></span>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 text-xs">
+                  <FundBit label="P/E"        val={pickedStock.pe}     fmt={(v)=>v.toFixed(1)} />
+                  <FundBit label="ROCE"       val={pickedStock.roce}   fmt={(v)=>v.toFixed(1)+"%"} />
+                  <FundBit label="Div Yield"  val={pickedStock.divYld} fmt={(v)=>v.toFixed(2)+"%"} />
+                  <FundBit label="MarCap ₹Cr" val={pickedStock.marCap} fmt={(v)=>v>=1e5?(v/1e5).toFixed(1)+"L":v.toLocaleString("en-IN")} />
+                  <FundBit label="Seed CMP"   val={pickedStock.cmp}    fmt={(v)=>"₹"+v.toFixed(0)} />
+                </div>
+              </div>
+            )}
           </div>
         )}
         {mode === "fund" && pickedFund && (
