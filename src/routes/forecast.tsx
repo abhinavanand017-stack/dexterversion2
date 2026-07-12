@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info, Settings2, Clock, History } from "lucide-react";
+import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info, Settings2, Clock, History, Activity, Sparkles } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, BarChart, Bar as RBar } from "recharts";
 import { buildFeatures } from "@/lib/forecast/features";
 import { runSelected, MODEL_SPECS, type ModelResult, type ModelSpec } from "@/lib/forecast/models";
@@ -13,6 +13,8 @@ import { NIFTY500, type NiftyStock } from "@/lib/nifty500";
 import { FUND_UNIVERSE, FUND_CATEGORY_LABELS, type CuratedFund } from "@/lib/fundUniverse";
 import { INDICES, getIndex } from "@/lib/indices";
 import { fetchYahooChart } from "@/lib/yahoo.functions";
+import { runDeepResearch, type DeepResearchResult, type DeepOverrides } from "@/lib/forecast/deepResearch";
+import { MODEL_ACCURACY, accuracyColor, plainConsensus, pushHistory, readHistory, assessVix, bucketBenchmark, type HistoryEntry } from "@/lib/forecast/accuracy";
 
 export const Route = createFileRoute("/forecast")({
   validateSearch: (s: Record<string, unknown>) => ({
@@ -114,6 +116,14 @@ function ForecastPage() {
   const [meta, setMeta] = useState<{ name: string; exchange: string; currency: string }>({ name: "", exchange: "NSE", currency: "₹" });
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"price" | "perf" | "mc" | "ind">("price");
+
+  // Deep Research (Models 18–22) + Market Context + History
+  const [deep, setDeep] = useState<DeepResearchResult | null>(null);
+  const [overrides, setOverrides] = useState<DeepOverrides>({ eps: null, epsCagr5y: null, revGrowth: null });
+  const [vix, setVix] = useState<number | null>(null);
+  const [n200Above, setN200Above] = useState<boolean | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>(() => { try { return readHistory(); } catch { return []; } });
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const [pickedStock, setPickedStock] = useState<NiftyStock | null>(() => NIFTY500.find((s) => s.symbol === "RELIANCE") ?? null);
   const [pickedFund, setPickedFund] = useState<CuratedFund | null>(null);
@@ -350,12 +360,76 @@ function ForecastPage() {
     return list;
   }, [lastFeature, mc, effectiveHorizon]);
 
+  // Market Context: fetch VIX + Nifty 200 last close vs 200 DMA (once on mount, cached)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [v, n] = await Promise.all([
+          fetchYahooChart({ data: { symbol: "^INDIAVIX", range: "5d", interval: "1d" } }),
+          fetchYahooChart({ data: { symbol: "^CNX200", range: "1y", interval: "1d" } }),
+        ]);
+        if (cancelled) return;
+        if (v.ok && v.bars?.length) setVix(v.bars[v.bars.length - 1].c);
+        if (n.ok && n.bars && n.bars.length >= 200) {
+          const closes = n.bars.map((b) => b.c);
+          const tail200 = closes.slice(-200);
+          const dma = tail200.reduce((s, x) => s + x, 0) / tail200.length;
+          setN200Above(closes[closes.length - 1] > dma);
+        }
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Deep Research (Models 18–22) — recompute whenever results/overrides/bars change
+  useEffect(() => {
+    let cancelled = false;
+    if (mode !== "stock" || !bars.length || !results.length) { setDeep(null); return; }
+    (async () => {
+      const rows = buildFeatures(bars);
+      let benchBars: PriceBar[] | null = null;
+      const bench = bucketBenchmark(pickedStock?.bucket);
+      const idx = getIndex(bench.key);
+      if (idx) {
+        try {
+          const r = await fetchYahooChart({ data: { symbol: idx.yahooSymbol, range: "1y", interval: "1d" } });
+          if (r.ok && r.bars.length) benchBars = r.bars;
+        } catch { /* fallback in model */ }
+      }
+      if (cancelled) return;
+      const dr = runDeepResearch(bars, rows, effectiveHorizon, pickedStock, benchBars, bench.name, overrides);
+      setDeep(dr);
+    })();
+    return () => { cancelled = true; };
+  }, [bars, results, overrides, pickedStock, mode, effectiveHorizon]);
+
+  // Push run into history when a new consensus completes
+  useEffect(() => {
+    if (!consensus || !results.length || !bars.length) return;
+    const entry: HistoryEntry = {
+      ts: Date.now(),
+      asset: meta.name || query,
+      horizon: effectiveHorizon,
+      price: currentPrice,
+      consensusLabel: consensus.label,
+      score: consensus.score,
+      targetLow: consensus.targetLow,
+      targetHigh: consensus.targetHigh,
+      models: results.length,
+    };
+    setHistory(pushHistory(entry));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results.length]);
+
+  const vixInfo = assessVix(vix);
+
   return (
     <div className="space-y-5 dx-fade-in">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Dexter Forecaster</h1>
         <p className="text-sm text-muted-foreground">
-          Live price data from a layered backend service (Yahoo → Marketstack fallback). Pick which models to run and how aggressively to fit.
+          Live prices via Yahoo → Marketstack fallback. 17 forecast models + 5 Deep Research models. If historical data can't be fetched, the run stops with a clear error — no synthetic prices.
         </p>
       </header>
 
@@ -617,6 +691,26 @@ function ForecastPage() {
         <LongTermPanel res={longResult} meta={meta} rebase={rebase} confidence={confidenceBand} />
       )}
 
+      {/* Market Context banner */}
+      {(vix != null || n200Above != null) && (
+        <div className="dx-glass p-3 flex flex-wrap items-center gap-3 text-xs">
+          <span className="flex items-center gap-1 text-muted-foreground uppercase tracking-wider text-[10px]">
+            <Activity className="w-3.5 h-3.5" /> Market context
+          </span>
+          {vix != null && (
+            <span className="flex items-center gap-1">
+              India VIX <span className="font-mono">{vix.toFixed(2)}</span>
+              <span className="px-1.5 py-0.5 rounded font-mono text-[10px]" style={{ background: `${vixInfo.color}20`, color: vixInfo.color, border: `1px solid ${vixInfo.color}` }}>{vixInfo.label}</span>
+            </span>
+          )}
+          {n200Above != null && (
+            <span className="flex items-center gap-1">
+              NIFTY 200 <span style={{ color: n200Above ? "#00ff88" : "#ff4466" }} className="font-semibold">{n200Above ? "above" : "below"}</span> 200-DMA
+            </span>
+          )}
+          <span className="text-[10px] text-muted-foreground ml-auto">Broader regime context — read alongside the model consensus below.</span>
+        </div>
+      )}
 
 
       {/* Hero consensus */}
@@ -658,6 +752,35 @@ function ForecastPage() {
           ))}
         </div>
       )}
+
+      {/* Model Consensus summary card */}
+      {consensus && results.length > 0 && (
+        <div className="dx-glass p-4 border-l-2" style={{ borderLeftColor: SIGNAL_COLORS[consensus.label]?.tx || "#00d4ff" }}>
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm">Model Consensus Summary</h3>
+            <SignalBadge label={consensus.label} />
+            <span className="ml-auto text-[11px] text-muted-foreground font-mono">
+              agreement {(consensus.agreement * 100).toFixed(0)}%
+            </span>
+          </div>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {plainConsensus(meta.name || query, effectiveHorizon, consensus, meta.currency)}
+          </p>
+        </div>
+      )}
+
+      {/* Deep Research (Models 18–22) — stock mode only */}
+      {mode === "stock" && deep && (
+        <DeepResearchPanel
+          deep={deep}
+          currency={meta.currency}
+          currentPrice={currentPrice}
+          overrides={overrides}
+          setOverrides={setOverrides}
+        />
+      )}
+
 
       {/* Charts */}
       {results.length > 0 && (
@@ -779,11 +902,53 @@ function ForecastPage() {
         </div>
       )}
 
+      {/* Past forecast history */}
+      {history.length > 0 && (
+        <div className="dx-glass p-4">
+          <button onClick={() => setHistoryOpen((v) => !v)} className="flex items-center gap-2 text-sm font-semibold w-full">
+            {historyOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            <History className="w-4 h-4" /> How accurate were past forecasts?
+            <span className="ml-auto text-[10px] text-muted-foreground font-mono">{history.length} run{history.length === 1 ? "" : "s"} logged</span>
+          </button>
+          {historyOpen && (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-[11px] font-mono">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="text-left py-1 pr-2">When</th>
+                    <th className="text-left py-1 pr-2">Asset</th>
+                    <th className="text-right py-1 pr-2">Horizon</th>
+                    <th className="text-right py-1 pr-2">Price then</th>
+                    <th className="text-left py-1 pr-2">Consensus</th>
+                    <th className="text-right py-1 pr-2">Weighted %</th>
+                    <th className="text-right py-1">Target range</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.slice(0, 5).map((h, i) => (
+                    <tr key={i} className="border-t border-border/40">
+                      <td className="py-1 pr-2">{new Date(h.ts).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}</td>
+                      <td className="py-1 pr-2 truncate max-w-[140px]">{h.asset}</td>
+                      <td className="py-1 pr-2 text-right">{h.horizon}d</td>
+                      <td className="py-1 pr-2 text-right">₹{h.price.toFixed(2)}</td>
+                      <td className="py-1 pr-2">{h.consensusLabel}</td>
+                      <td className="py-1 pr-2 text-right" style={{ color: h.score >= 0 ? "#00ff88" : "#ff4466" }}>{h.score >= 0 ? "+" : ""}{h.score.toFixed(2)}%</td>
+                      <td className="py-1 text-right">₹{h.targetLow.toFixed(0)}–₹{h.targetHigh.toFixed(0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       <p className="text-xs text-muted-foreground italic border-t border-border pt-3">
         This app is for research, forecasting and news only — do not trust signals without your own research.
-        Forecasts are produced by deterministic mathematical models on seeded synthetic OHLCV for reproducibility.
-        They are research outputs, not investment advice. Black-swan events, regime breaks, and behavioural
-        contamination are out of scope. Trade at your own discretion. Not SEBI-registered investment advice.
+        Forecasts are produced by deterministic mathematical models on live historical OHLCV data (Yahoo → Marketstack).
+        When historical data can't be fetched, the run stops with a clear "⚠️ Could not fetch" error rather than falling back
+        to synthetic prices. Per-model accuracy badges are indicative baselines from backtests; realised accuracy will vary.
+        Black-swan events, regime breaks, and behavioural contamination are out of scope. Not SEBI-registered investment advice.
         Past model accuracy does not guarantee future performance. Always consult a SEBI-registered advisor before investing.
       </p>
     </div>
@@ -828,6 +993,16 @@ function ModelCard({ r, currency }: { r: ModelResult; currency: string }) {
         <span>MAPE {r.mape.toFixed(1)}%</span>
         <span>Conf {r.confidence.toFixed(0)}%</span>
       </div>
+      {MODEL_ACCURACY[r.id] && (
+        <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
+          <span className="text-muted-foreground">Historical:</span>
+          <span className="px-1.5 py-0.5 rounded font-mono"
+            style={{ background: `${accuracyColor(MODEL_ACCURACY[r.id].mape)}20`, color: accuracyColor(MODEL_ACCURACY[r.id].mape), border: `1px solid ${accuracyColor(MODEL_ACCURACY[r.id].mape)}` }}>
+            ±{MODEL_ACCURACY[r.id].mape.toFixed(1)}% MAPE
+          </span>
+          <span className="text-muted-foreground font-mono">· hit {MODEL_ACCURACY[r.id].hitRate}%</span>
+        </div>
+      )}
       {r.note && <div className="mt-1 text-[10px] text-amber-400/70">{r.note}</div>}
     </div>
   );
@@ -961,4 +1136,174 @@ function FundBit({ label, val, fmt }: { label: string; val: number | undefined; 
     </div>
   );
 }
+
+// ============= Deep Research (Models 18–22) =============
+function DeepResearchPanel({
+  deep, currency, currentPrice, overrides, setOverrides,
+}: {
+  deep: DeepResearchResult;
+  currency: string;
+  currentPrice: number;
+  overrides: DeepOverrides;
+  setOverrides: React.Dispatch<React.SetStateAction<DeepOverrides>>;
+}) {
+  const { dcf, emom, bbrev, rs, quant } = deep;
+  const setNum = (k: keyof DeepOverrides) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setOverrides((prev) => ({ ...prev, [k]: v === "" ? null : Number(v) }));
+  };
+  return (
+    <div className="dx-glass p-4 space-y-4 border border-primary/25">
+      <div className="flex items-center gap-2">
+        <Sparkles className="w-4 h-4" style={{ color: "#a78bfa" }} />
+        <h3 className="font-semibold text-sm">🔬 Deep Research (Models 18–22)</h3>
+        <span className="ml-auto text-[10px] text-muted-foreground font-mono">stock mode · seeded fundamentals</span>
+      </div>
+
+      {/* Manual overrides */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+        <label className="flex flex-col">
+          <span className="text-muted-foreground text-[10px]">Override EPS (₹)</span>
+          <input type="number" placeholder={dcf.used.eps.toFixed(2)} value={overrides.eps ?? ""} onChange={setNum("eps")}
+            className="mt-1 px-2 py-1 bg-background/40 border border-border rounded font-mono outline-none" />
+        </label>
+        <label className="flex flex-col">
+          <span className="text-muted-foreground text-[10px]">EPS 5Y CAGR (%)</span>
+          <input type="number" placeholder={dcf.used.g.toFixed(1)} value={overrides.epsCagr5y ?? ""} onChange={setNum("epsCagr5y")}
+            className="mt-1 px-2 py-1 bg-background/40 border border-border rounded font-mono outline-none" />
+        </label>
+        <label className="flex flex-col">
+          <span className="text-muted-foreground text-[10px]">Revenue Growth (%)</span>
+          <input type="number" placeholder={emom.breakdown.sales.toFixed(1)} value={overrides.revGrowth ?? ""} onChange={setNum("revGrowth")}
+            className="mt-1 px-2 py-1 bg-background/40 border border-border rounded font-mono outline-none" />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {/* DCF-Lite */}
+        <DRCard title="18 · DCF-Lite" accent="#00d4ff">
+          <div className="text-lg font-mono">{currency}{dcf.fairValue.toFixed(2)}</div>
+          <div className="text-[11px] text-muted-foreground">
+            Fair value · MoS <span style={{ color: dcf.mos >= 0 ? "#00ff88" : "#ff4466" }}>{dcf.mos >= 0 ? "+" : ""}{dcf.mos.toFixed(1)}%</span>
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-1 font-mono">
+            EPS {dcf.used.eps.toFixed(2)} · g {dcf.used.g.toFixed(1)}% · PE {dcf.used.pe.toFixed(1)}
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            Band: {currency}{dcf.band.low.toFixed(2)} – {currency}{dcf.band.high.toFixed(2)}
+          </div>
+          {dcf.note && <div className="text-[10px] text-amber-400/70 mt-1">{dcf.note}</div>}
+        </DRCard>
+
+        {/* Earnings Momentum gauge */}
+        <DRCard title="19 · Earnings Momentum" accent="#00ff88">
+          <div className="text-lg font-mono">{emom.score.toFixed(0)}<span className="text-muted-foreground text-xs">/100</span></div>
+          <div className="h-1.5 bg-muted rounded mt-1">
+            <div className="h-full rounded" style={{ width: `${emom.score}%`, background: emom.score >= 66 ? "#00ff88" : emom.score >= 40 ? "#ffaa00" : "#ff4466" }} />
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-2 font-mono">
+            Profit {emom.breakdown.profit >= 0 ? "+" : ""}{emom.breakdown.profit.toFixed(1)}% · Sales {emom.breakdown.sales >= 0 ? "+" : ""}{emom.breakdown.sales.toFixed(1)}%
+          </div>
+          <div className="text-[10px] text-muted-foreground">Target shift {emom.targetShift >= 0 ? "+" : ""}{emom.targetShift.toFixed(2)}%</div>
+        </DRCard>
+
+        {/* Bollinger Reversion */}
+        <DRCard title="20 · Bollinger Reversion" accent="#ffaa00">
+          <div className="text-lg font-mono">{currency}{bbrev.target.toFixed(2)}</div>
+          <div className="text-[11px] text-muted-foreground">
+            Reversion target · <span style={{ color: bbrev.distance >= 0 ? "#00ff88" : "#ff4466" }}>{bbrev.distance >= 0 ? "+" : ""}{bbrev.distance.toFixed(2)}%</span> from price
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-1 font-mono">
+            Zone: <span style={{ color: bbrev.zone === "inside" ? "#94a3b8" : bbrev.zone === "upper" ? "#ff4466" : "#00ff88" }}>{bbrev.zone.toUpperCase()}</span>
+            · Bands {currency}{bbrev.bandLower.toFixed(1)} – {currency}{bbrev.bandUpper.toFixed(1)}
+          </div>
+        </DRCard>
+
+        {/* Relative Strength */}
+        <DRCard title="21 · Relative Strength" accent="#a78bfa">
+          <div className="text-lg font-mono" style={{ color: rs.rs >= 0 ? "#00ff88" : "#ff4466" }}>
+            {rs.rs >= 0 ? "+" : ""}{rs.rs.toFixed(2)} pp
+          </div>
+          <div className="text-[11px] text-muted-foreground">vs {rs.benchLabel} · 3-month</div>
+          <div className="text-[10px] text-muted-foreground mt-1 font-mono">
+            Stock {rs.stockRet3m >= 0 ? "+" : ""}{rs.stockRet3m.toFixed(2)}% · Bench {rs.benchRet3m >= 0 ? "+" : ""}{rs.benchRet3m.toFixed(2)}%
+          </div>
+          <div className="h-1.5 bg-muted rounded mt-2">
+            <div className="h-full rounded" style={{ width: `${rs.score}%`, background: rs.score >= 55 ? "#00ff88" : rs.score >= 45 ? "#ffaa00" : "#ff4466" }} />
+          </div>
+        </DRCard>
+
+        {/* Composite Quant Score with hexagonal radar */}
+        <div className="p-3 rounded-lg border md:col-span-2 lg:col-span-2" style={{ borderColor: "#00ff8830", background: "#0d1117" }}>
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-semibold">22 · Composite Quant Score</div>
+            <div className="ml-auto text-2xl font-mono" style={{ color: quant.score >= 66 ? "#00ff88" : quant.score >= 40 ? "#ffaa00" : "#ff4466" }}>
+              {quant.score.toFixed(0)}<span className="text-xs text-muted-foreground">/100</span>
+            </div>
+          </div>
+          <QuantRadar axes={quant.axes} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DRCard({ title, accent, children }: { title: string; accent: string; children: React.ReactNode }) {
+  return (
+    <div className="p-3 rounded-lg border" style={{ borderColor: `${accent}30`, background: "#0d1117" }}>
+      <div className="text-[11px] font-mono uppercase tracking-wider" style={{ color: accent }}>{title}</div>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+function QuantRadar({ axes }: { axes: Array<{ label: string; value: number }> }) {
+  const size = 220;
+  const cx = size / 2;
+  const cy = size / 2;
+  const rMax = size / 2 - 30;
+  const n = axes.length;
+  const angle = (i: number) => -Math.PI / 2 + (i * 2 * Math.PI) / n;
+  const pt = (i: number, v: number) => {
+    const r = (Math.max(0, Math.min(100, v)) / 100) * rMax;
+    return [cx + r * Math.cos(angle(i)), cy + r * Math.sin(angle(i))];
+  };
+  const outer = axes.map((_, i) => pt(i, 100));
+  const inner = axes.map((a, i) => pt(i, a.value));
+  const path = inner.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ") + " Z";
+  const grid = [25, 50, 75, 100].map((v) =>
+    axes.map((_, i) => pt(i, v)).map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ") + " Z"
+  );
+  return (
+    <div className="flex flex-col sm:flex-row items-center gap-3 mt-2">
+      <svg width={size} height={size} className="shrink-0">
+        {grid.map((g, i) => (
+          <path key={i} d={g} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+        ))}
+        {outer.map(([x, y], i) => (
+          <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="rgba(255,255,255,0.06)" />
+        ))}
+        <path d={path} fill="rgba(0,255,136,0.15)" stroke="#00ff88" strokeWidth={1.5} />
+        {axes.map((a, i) => {
+          const [lx, ly] = pt(i, 118);
+          return (
+            <text key={i} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+              fontSize="9" fill="#94a3b8" className="font-mono uppercase">{a.label}</text>
+          );
+        })}
+      </svg>
+      <div className="flex-1 grid grid-cols-2 gap-1.5 text-[11px] w-full">
+        {axes.map((a, i) => (
+          <div key={i} className="flex items-center justify-between gap-2 px-2 py-1 rounded border border-border/40">
+            <span className="text-muted-foreground truncate">{a.label}</span>
+            <span className="font-mono" style={{ color: a.value >= 66 ? "#00ff88" : a.value >= 40 ? "#ffaa00" : "#ff4466" }}>
+              {a.value.toFixed(0)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
