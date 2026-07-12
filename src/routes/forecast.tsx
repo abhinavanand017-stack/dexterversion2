@@ -753,6 +753,35 @@ function ForecastPage() {
         </div>
       )}
 
+      {/* Model Consensus summary card */}
+      {consensus && results.length > 0 && (
+        <div className="dx-glass p-4 border-l-2" style={{ borderLeftColor: SIGNAL_COLORS[consensus.label]?.tx || "#00d4ff" }}>
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-4 h-4 text-primary" />
+            <h3 className="font-semibold text-sm">Model Consensus Summary</h3>
+            <SignalBadge label={consensus.label} />
+            <span className="ml-auto text-[11px] text-muted-foreground font-mono">
+              agreement {(consensus.agreement * 100).toFixed(0)}%
+            </span>
+          </div>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {plainConsensus(meta.name || query, effectiveHorizon, consensus, meta.currency)}
+          </p>
+        </div>
+      )}
+
+      {/* Deep Research (Models 18–22) — stock mode only */}
+      {mode === "stock" && deep && (
+        <DeepResearchPanel
+          deep={deep}
+          currency={meta.currency}
+          currentPrice={currentPrice}
+          overrides={overrides}
+          setOverrides={setOverrides}
+        />
+      )}
+
+
       {/* Charts */}
       {results.length > 0 && (
         <div className="dx-glass p-4">
