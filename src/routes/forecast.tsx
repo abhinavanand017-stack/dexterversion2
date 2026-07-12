@@ -429,7 +429,7 @@ function ForecastPage() {
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Dexter Forecaster</h1>
         <p className="text-sm text-muted-foreground">
-          Live price data from a layered backend service (Yahoo → Marketstack fallback). Pick which models to run and how aggressively to fit.
+          Live prices via Yahoo → Marketstack fallback. 17 forecast models + 5 Deep Research models. If historical data can't be fetched, the run stops with a clear error — no synthetic prices.
         </p>
       </header>
 
