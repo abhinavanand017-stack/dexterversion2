@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info, Settings2, Clock, History } from "lucide-react";
+import { Search, TrendingUp, TrendingDown, Minus, Loader2, AlertTriangle, ChevronDown, ChevronRight, Info, Settings2, Clock, History, Activity, Sparkles } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, BarChart, Bar as RBar } from "recharts";
 import { buildFeatures } from "@/lib/forecast/features";
 import { runSelected, MODEL_SPECS, type ModelResult, type ModelSpec } from "@/lib/forecast/models";
@@ -13,6 +13,8 @@ import { NIFTY500, type NiftyStock } from "@/lib/nifty500";
 import { FUND_UNIVERSE, FUND_CATEGORY_LABELS, type CuratedFund } from "@/lib/fundUniverse";
 import { INDICES, getIndex } from "@/lib/indices";
 import { fetchYahooChart } from "@/lib/yahoo.functions";
+import { runDeepResearch, type DeepResearchResult, type DeepOverrides } from "@/lib/forecast/deepResearch";
+import { MODEL_ACCURACY, accuracyColor, plainConsensus, pushHistory, readHistory, assessVix, bucketBenchmark, type HistoryEntry } from "@/lib/forecast/accuracy";
 
 export const Route = createFileRoute("/forecast")({
   validateSearch: (s: Record<string, unknown>) => ({
