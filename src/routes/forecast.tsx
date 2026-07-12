@@ -691,6 +691,26 @@ function ForecastPage() {
         <LongTermPanel res={longResult} meta={meta} rebase={rebase} confidence={confidenceBand} />
       )}
 
+      {/* Market Context banner */}
+      {(vix != null || n200Above != null) && (
+        <div className="dx-glass p-3 flex flex-wrap items-center gap-3 text-xs">
+          <span className="flex items-center gap-1 text-muted-foreground uppercase tracking-wider text-[10px]">
+            <Activity className="w-3.5 h-3.5" /> Market context
+          </span>
+          {vix != null && (
+            <span className="flex items-center gap-1">
+              India VIX <span className="font-mono">{vix.toFixed(2)}</span>
+              <span className="px-1.5 py-0.5 rounded font-mono text-[10px]" style={{ background: `${vixInfo.color}20`, color: vixInfo.color, border: `1px solid ${vixInfo.color}` }}>{vixInfo.label}</span>
+            </span>
+          )}
+          {n200Above != null && (
+            <span className="flex items-center gap-1">
+              NIFTY 200 <span style={{ color: n200Above ? "#00ff88" : "#ff4466" }} className="font-semibold">{n200Above ? "above" : "below"}</span> 200-DMA
+            </span>
+          )}
+          <span className="text-[10px] text-muted-foreground ml-auto">Broader regime context — read alongside the model consensus below.</span>
+        </div>
+      )}
 
 
       {/* Hero consensus */}
