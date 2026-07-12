@@ -993,6 +993,16 @@ function ModelCard({ r, currency }: { r: ModelResult; currency: string }) {
         <span>MAPE {r.mape.toFixed(1)}%</span>
         <span>Conf {r.confidence.toFixed(0)}%</span>
       </div>
+      {MODEL_ACCURACY[r.id] && (
+        <div className="mt-1.5 flex items-center gap-1.5 text-[10px]">
+          <span className="text-muted-foreground">Historical:</span>
+          <span className="px-1.5 py-0.5 rounded font-mono"
+            style={{ background: `${accuracyColor(MODEL_ACCURACY[r.id].mape)}20`, color: accuracyColor(MODEL_ACCURACY[r.id].mape), border: `1px solid ${accuracyColor(MODEL_ACCURACY[r.id].mape)}` }}>
+            ±{MODEL_ACCURACY[r.id].mape.toFixed(1)}% MAPE
+          </span>
+          <span className="text-muted-foreground font-mono">· hit {MODEL_ACCURACY[r.id].hitRate}%</span>
+        </div>
+      )}
       {r.note && <div className="mt-1 text-[10px] text-amber-400/70">{r.note}</div>}
     </div>
   );
