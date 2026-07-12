@@ -902,11 +902,53 @@ function ForecastPage() {
         </div>
       )}
 
+      {/* Past forecast history */}
+      {history.length > 0 && (
+        <div className="dx-glass p-4">
+          <button onClick={() => setHistoryOpen((v) => !v)} className="flex items-center gap-2 text-sm font-semibold w-full">
+            {historyOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            <History className="w-4 h-4" /> How accurate were past forecasts?
+            <span className="ml-auto text-[10px] text-muted-foreground font-mono">{history.length} run{history.length === 1 ? "" : "s"} logged</span>
+          </button>
+          {historyOpen && (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-[11px] font-mono">
+                <thead className="text-muted-foreground">
+                  <tr>
+                    <th className="text-left py-1 pr-2">When</th>
+                    <th className="text-left py-1 pr-2">Asset</th>
+                    <th className="text-right py-1 pr-2">Horizon</th>
+                    <th className="text-right py-1 pr-2">Price then</th>
+                    <th className="text-left py-1 pr-2">Consensus</th>
+                    <th className="text-right py-1 pr-2">Weighted %</th>
+                    <th className="text-right py-1">Target range</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.slice(0, 5).map((h, i) => (
+                    <tr key={i} className="border-t border-border/40">
+                      <td className="py-1 pr-2">{new Date(h.ts).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}</td>
+                      <td className="py-1 pr-2 truncate max-w-[140px]">{h.asset}</td>
+                      <td className="py-1 pr-2 text-right">{h.horizon}d</td>
+                      <td className="py-1 pr-2 text-right">₹{h.price.toFixed(2)}</td>
+                      <td className="py-1 pr-2">{h.consensusLabel}</td>
+                      <td className="py-1 pr-2 text-right" style={{ color: h.score >= 0 ? "#00ff88" : "#ff4466" }}>{h.score >= 0 ? "+" : ""}{h.score.toFixed(2)}%</td>
+                      <td className="py-1 text-right">₹{h.targetLow.toFixed(0)}–₹{h.targetHigh.toFixed(0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       <p className="text-xs text-muted-foreground italic border-t border-border pt-3">
         This app is for research, forecasting and news only — do not trust signals without your own research.
-        Forecasts are produced by deterministic mathematical models on seeded synthetic OHLCV for reproducibility.
-        They are research outputs, not investment advice. Black-swan events, regime breaks, and behavioural
-        contamination are out of scope. Trade at your own discretion. Not SEBI-registered investment advice.
+        Forecasts are produced by deterministic mathematical models on live historical OHLCV data (Yahoo → Marketstack).
+        When historical data can't be fetched, the run stops with a clear "⚠️ Could not fetch" error rather than falling back
+        to synthetic prices. Per-model accuracy badges are indicative baselines from backtests; realised accuracy will vary.
+        Black-swan events, regime breaks, and behavioural contamination are out of scope. Not SEBI-registered investment advice.
         Past model accuracy does not guarantee future performance. Always consult a SEBI-registered advisor before investing.
       </p>
     </div>
