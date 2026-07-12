@@ -1137,3 +1137,173 @@ function FundBit({ label, val, fmt }: { label: string; val: number | undefined; 
   );
 }
 
+// ============= Deep Research (Models 18–22) =============
+function DeepResearchPanel({
+  deep, currency, currentPrice, overrides, setOverrides,
+}: {
+  deep: DeepResearchResult;
+  currency: string;
+  currentPrice: number;
+  overrides: DeepOverrides;
+  setOverrides: React.Dispatch<React.SetStateAction<DeepOverrides>>;
+}) {
+  const { dcf, emom, bbrev, rs, quant } = deep;
+  const setNum = (k: keyof DeepOverrides) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    setOverrides((prev) => ({ ...prev, [k]: v === "" ? null : Number(v) }));
+  };
+  return (
+    <div className="dx-glass p-4 space-y-4 border border-primary/25">
+      <div className="flex items-center gap-2">
+        <Sparkles className="w-4 h-4" style={{ color: "#a78bfa" }} />
+        <h3 className="font-semibold text-sm">🔬 Deep Research (Models 18–22)</h3>
+        <span className="ml-auto text-[10px] text-muted-foreground font-mono">stock mode · seeded fundamentals</span>
+      </div>
+
+      {/* Manual overrides */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+        <label className="flex flex-col">
+          <span className="text-muted-foreground text-[10px]">Override EPS (₹)</span>
+          <input type="number" placeholder={dcf.used.eps.toFixed(2)} value={overrides.eps ?? ""} onChange={setNum("eps")}
+            className="mt-1 px-2 py-1 bg-background/40 border border-border rounded font-mono outline-none" />
+        </label>
+        <label className="flex flex-col">
+          <span className="text-muted-foreground text-[10px]">EPS 5Y CAGR (%)</span>
+          <input type="number" placeholder={dcf.used.g.toFixed(1)} value={overrides.epsCagr5y ?? ""} onChange={setNum("epsCagr5y")}
+            className="mt-1 px-2 py-1 bg-background/40 border border-border rounded font-mono outline-none" />
+        </label>
+        <label className="flex flex-col">
+          <span className="text-muted-foreground text-[10px]">Revenue Growth (%)</span>
+          <input type="number" placeholder={emom.breakdown.sales.toFixed(1)} value={overrides.revGrowth ?? ""} onChange={setNum("revGrowth")}
+            className="mt-1 px-2 py-1 bg-background/40 border border-border rounded font-mono outline-none" />
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {/* DCF-Lite */}
+        <DRCard title="18 · DCF-Lite" accent="#00d4ff">
+          <div className="text-lg font-mono">{currency}{dcf.fairValue.toFixed(2)}</div>
+          <div className="text-[11px] text-muted-foreground">
+            Fair value · MoS <span style={{ color: dcf.mos >= 0 ? "#00ff88" : "#ff4466" }}>{dcf.mos >= 0 ? "+" : ""}{dcf.mos.toFixed(1)}%</span>
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-1 font-mono">
+            EPS {dcf.used.eps.toFixed(2)} · g {dcf.used.g.toFixed(1)}% · PE {dcf.used.pe.toFixed(1)}
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            Band: {currency}{dcf.band.low.toFixed(2)} – {currency}{dcf.band.high.toFixed(2)}
+          </div>
+          {dcf.note && <div className="text-[10px] text-amber-400/70 mt-1">{dcf.note}</div>}
+        </DRCard>
+
+        {/* Earnings Momentum gauge */}
+        <DRCard title="19 · Earnings Momentum" accent="#00ff88">
+          <div className="text-lg font-mono">{emom.score.toFixed(0)}<span className="text-muted-foreground text-xs">/100</span></div>
+          <div className="h-1.5 bg-muted rounded mt-1">
+            <div className="h-full rounded" style={{ width: `${emom.score}%`, background: emom.score >= 66 ? "#00ff88" : emom.score >= 40 ? "#ffaa00" : "#ff4466" }} />
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-2 font-mono">
+            Profit {emom.breakdown.profit >= 0 ? "+" : ""}{emom.breakdown.profit.toFixed(1)}% · Sales {emom.breakdown.sales >= 0 ? "+" : ""}{emom.breakdown.sales.toFixed(1)}%
+          </div>
+          <div className="text-[10px] text-muted-foreground">Target shift {emom.targetShift >= 0 ? "+" : ""}{emom.targetShift.toFixed(2)}%</div>
+        </DRCard>
+
+        {/* Bollinger Reversion */}
+        <DRCard title="20 · Bollinger Reversion" accent="#ffaa00">
+          <div className="text-lg font-mono">{currency}{bbrev.target.toFixed(2)}</div>
+          <div className="text-[11px] text-muted-foreground">
+            Reversion target · <span style={{ color: bbrev.distance >= 0 ? "#00ff88" : "#ff4466" }}>{bbrev.distance >= 0 ? "+" : ""}{bbrev.distance.toFixed(2)}%</span> from price
+          </div>
+          <div className="text-[10px] text-muted-foreground mt-1 font-mono">
+            Zone: <span style={{ color: bbrev.zone === "inside" ? "#94a3b8" : bbrev.zone === "upper" ? "#ff4466" : "#00ff88" }}>{bbrev.zone.toUpperCase()}</span>
+            · Bands {currency}{bbrev.bandLower.toFixed(1)} – {currency}{bbrev.bandUpper.toFixed(1)}
+          </div>
+        </DRCard>
+
+        {/* Relative Strength */}
+        <DRCard title="21 · Relative Strength" accent="#a78bfa">
+          <div className="text-lg font-mono" style={{ color: rs.rs >= 0 ? "#00ff88" : "#ff4466" }}>
+            {rs.rs >= 0 ? "+" : ""}{rs.rs.toFixed(2)} pp
+          </div>
+          <div className="text-[11px] text-muted-foreground">vs {rs.benchLabel} · 3-month</div>
+          <div className="text-[10px] text-muted-foreground mt-1 font-mono">
+            Stock {rs.stockRet3m >= 0 ? "+" : ""}{rs.stockRet3m.toFixed(2)}% · Bench {rs.benchRet3m >= 0 ? "+" : ""}{rs.benchRet3m.toFixed(2)}%
+          </div>
+          <div className="h-1.5 bg-muted rounded mt-2">
+            <div className="h-full rounded" style={{ width: `${rs.score}%`, background: rs.score >= 55 ? "#00ff88" : rs.score >= 45 ? "#ffaa00" : "#ff4466" }} />
+          </div>
+        </DRCard>
+
+        {/* Composite Quant Score with hexagonal radar */}
+        <div className="p-3 rounded-lg border md:col-span-2 lg:col-span-2" style={{ borderColor: "#00ff8830", background: "#0d1117" }}>
+          <div className="flex items-center gap-2">
+            <div className="text-sm font-semibold">22 · Composite Quant Score</div>
+            <div className="ml-auto text-2xl font-mono" style={{ color: quant.score >= 66 ? "#00ff88" : quant.score >= 40 ? "#ffaa00" : "#ff4466" }}>
+              {quant.score.toFixed(0)}<span className="text-xs text-muted-foreground">/100</span>
+            </div>
+          </div>
+          <QuantRadar axes={quant.axes} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DRCard({ title, accent, children }: { title: string; accent: string; children: React.ReactNode }) {
+  return (
+    <div className="p-3 rounded-lg border" style={{ borderColor: `${accent}30`, background: "#0d1117" }}>
+      <div className="text-[11px] font-mono uppercase tracking-wider" style={{ color: accent }}>{title}</div>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+function QuantRadar({ axes }: { axes: Array<{ label: string; value: number }> }) {
+  const size = 220;
+  const cx = size / 2;
+  const cy = size / 2;
+  const rMax = size / 2 - 30;
+  const n = axes.length;
+  const angle = (i: number) => -Math.PI / 2 + (i * 2 * Math.PI) / n;
+  const pt = (i: number, v: number) => {
+    const r = (Math.max(0, Math.min(100, v)) / 100) * rMax;
+    return [cx + r * Math.cos(angle(i)), cy + r * Math.sin(angle(i))];
+  };
+  const outer = axes.map((_, i) => pt(i, 100));
+  const inner = axes.map((a, i) => pt(i, a.value));
+  const path = inner.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ") + " Z";
+  const grid = [25, 50, 75, 100].map((v) =>
+    axes.map((_, i) => pt(i, v)).map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ") + " Z"
+  );
+  return (
+    <div className="flex flex-col sm:flex-row items-center gap-3 mt-2">
+      <svg width={size} height={size} className="shrink-0">
+        {grid.map((g, i) => (
+          <path key={i} d={g} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+        ))}
+        {outer.map(([x, y], i) => (
+          <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="rgba(255,255,255,0.06)" />
+        ))}
+        <path d={path} fill="rgba(0,255,136,0.15)" stroke="#00ff88" strokeWidth={1.5} />
+        {axes.map((a, i) => {
+          const [lx, ly] = pt(i, 118);
+          return (
+            <text key={i} x={lx} y={ly} textAnchor="middle" dominantBaseline="middle"
+              fontSize="9" fill="#94a3b8" className="font-mono uppercase">{a.label}</text>
+          );
+        })}
+      </svg>
+      <div className="flex-1 grid grid-cols-2 gap-1.5 text-[11px] w-full">
+        {axes.map((a, i) => (
+          <div key={i} className="flex items-center justify-between gap-2 px-2 py-1 rounded border border-border/40">
+            <span className="text-muted-foreground truncate">{a.label}</span>
+            <span className="font-mono" style={{ color: a.value >= 66 ? "#00ff88" : a.value >= 40 ? "#ffaa00" : "#ff4466" }}>
+              {a.value.toFixed(0)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
