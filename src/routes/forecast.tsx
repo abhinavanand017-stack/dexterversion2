@@ -117,6 +117,14 @@ function ForecastPage() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"price" | "perf" | "mc" | "ind">("price");
 
+  // Deep Research (Models 18–22) + Market Context + History
+  const [deep, setDeep] = useState<DeepResearchResult | null>(null);
+  const [overrides, setOverrides] = useState<DeepOverrides>({ eps: null, epsCagr5y: null, revGrowth: null });
+  const [vix, setVix] = useState<number | null>(null);
+  const [n200Above, setN200Above] = useState<boolean | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>(() => { try { return readHistory(); } catch { return []; } });
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   const [pickedStock, setPickedStock] = useState<NiftyStock | null>(() => NIFTY500.find((s) => s.symbol === "RELIANCE") ?? null);
   const [pickedFund, setPickedFund] = useState<CuratedFund | null>(null);
   const [pickedIndex, setPickedIndex] = useState<string | null>(() => search.index && getIndex(search.index) ? search.index : null);
