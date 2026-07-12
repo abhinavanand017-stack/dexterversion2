@@ -360,6 +360,70 @@ function ForecastPage() {
     return list;
   }, [lastFeature, mc, effectiveHorizon]);
 
+  // Market Context: fetch VIX + Nifty 200 last close vs 200 DMA (once on mount, cached)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [v, n] = await Promise.all([
+          fetchYahooChart({ data: { symbol: "^INDIAVIX", range: "5d", interval: "1d" } }),
+          fetchYahooChart({ data: { symbol: "^CNX200", range: "1y", interval: "1d" } }),
+        ]);
+        if (cancelled) return;
+        if (v.ok && v.bars?.length) setVix(v.bars[v.bars.length - 1].c);
+        if (n.ok && n.bars && n.bars.length >= 200) {
+          const closes = n.bars.map((b) => b.c);
+          const tail200 = closes.slice(-200);
+          const dma = tail200.reduce((s, x) => s + x, 0) / tail200.length;
+          setN200Above(closes[closes.length - 1] > dma);
+        }
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Deep Research (Models 18–22) — recompute whenever results/overrides/bars change
+  useEffect(() => {
+    let cancelled = false;
+    if (mode !== "stock" || !bars.length || !results.length) { setDeep(null); return; }
+    (async () => {
+      const rows = buildFeatures(bars);
+      let benchBars: PriceBar[] | null = null;
+      const bench = bucketBenchmark(pickedStock?.bucket);
+      const idx = getIndex(bench.key);
+      if (idx) {
+        try {
+          const r = await fetchYahooChart({ data: { symbol: idx.yahooSymbol, range: "1y", interval: "1d" } });
+          if (r.ok && r.bars.length) benchBars = r.bars;
+        } catch { /* fallback in model */ }
+      }
+      if (cancelled) return;
+      const dr = runDeepResearch(bars, rows, effectiveHorizon, pickedStock, benchBars, bench.name, overrides);
+      setDeep(dr);
+    })();
+    return () => { cancelled = true; };
+  }, [bars, results, overrides, pickedStock, mode, effectiveHorizon]);
+
+  // Push run into history when a new consensus completes
+  useEffect(() => {
+    if (!consensus || !results.length || !bars.length) return;
+    const entry: HistoryEntry = {
+      ts: Date.now(),
+      asset: meta.name || query,
+      horizon: effectiveHorizon,
+      price: currentPrice,
+      consensusLabel: consensus.label,
+      score: consensus.score,
+      targetLow: consensus.targetLow,
+      targetHigh: consensus.targetHigh,
+      models: results.length,
+    };
+    setHistory(pushHistory(entry));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results.length]);
+
+  const vixInfo = assessVix(vix);
+
   return (
     <div className="space-y-5 dx-fade-in">
       <header>
