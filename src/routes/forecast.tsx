@@ -406,7 +406,7 @@ function ForecastPage() {
       setDeep(dr);
     })();
     return () => { cancelled = true; };
-  }, [bars, results, overrides, pickedStock, mode, effectiveHorizon]);
+  }, [bars, results, overrides, pickedStock, mode, effectiveHorizon, deepEnabled]);
 
   // Push run into history when a new consensus completes
   useEffect(() => {
