@@ -1189,14 +1189,16 @@ function FundBit({ label, val, fmt }: { label: string; val: number | undefined; 
 
 // ============= Deep Research (Models 18–22) =============
 function DeepResearchPanel({
-  deep, currency, currentPrice, overrides, setOverrides,
+  deep, currency, currentPrice, overrides, setOverrides, visible,
 }: {
   deep: DeepResearchResult;
   currency: string;
   currentPrice: number;
   overrides: DeepOverrides;
   setOverrides: React.Dispatch<React.SetStateAction<DeepOverrides>>;
+  visible?: Set<"dcf" | "emom" | "bbrev" | "rs" | "quant">;
 }) {
+  const show = (k: "dcf" | "emom" | "bbrev" | "rs" | "quant") => !visible || visible.has(k);
   const { dcf, emom, bbrev, rs, quant } = deep;
   const setNum = (k: keyof DeepOverrides) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
