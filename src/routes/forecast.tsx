@@ -1304,6 +1304,7 @@ function DeepResearchPanel({
           </div>
           <QuantRadar axes={quant.axes} />
         </div>
+        )}
       </div>
     </div>
   );
