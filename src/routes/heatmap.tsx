@@ -45,7 +45,8 @@ function HeatmapPage() {
   const [lastTs, setLastTs] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(Date.now());
   const [hover, setHover] = useState<{ row: HeatmapIndex; x: number; y: number } | null>(null);
-  const marketOpen = useMemo(() => isMarketOpen(new Date(nowMs)), [nowMs]);
+  const marketStatus = useMarketStatus();
+  const marketOpen = marketStatus.status === "open";
   const abortRef = useRef<number>(0);
 
   const load = useCallback(async (cat: HeatmapCategory) => {
