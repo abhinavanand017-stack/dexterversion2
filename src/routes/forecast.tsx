@@ -389,7 +389,7 @@ function ForecastPage() {
   // Deep Research (Models 18–22) — recompute whenever results/overrides/bars change
   useEffect(() => {
     let cancelled = false;
-    if (mode !== "stock" || !bars.length || !results.length) { setDeep(null); return; }
+    if (!deepEnabled || mode !== "stock" || !bars.length || !results.length) { setDeep(null); return; }
     (async () => {
       const rows = buildFeatures(bars);
       let benchBars: PriceBar[] | null = null;
