@@ -32,7 +32,7 @@ export const NAV_ITEMS = [
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
-const TOUR_PATH = ["/", "/biometrics", "/shadow", "/score", "/optimizer", "/news"] as const;
+const TOUR_PATH = ["/", "/biometrics", "/investment-masterclass", "/score", "/optimizer", "/news"] as const;
 const TOUR_STEP_MS = 5000;
 
 export function AppSidebar() {
