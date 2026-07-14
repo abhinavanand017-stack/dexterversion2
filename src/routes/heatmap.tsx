@@ -32,15 +32,6 @@ function colorFor(pct: number): string {
   return "#7f1d1d";
 }
 
-function isMarketOpen(now = new Date()): boolean {
-  // IST = UTC+5:30
-  const ist = new Date(now.getTime() + (330 - now.getTimezoneOffset()) * 60000);
-  const day = ist.getUTCDay(); // now in IST-shifted, use UTC accessors
-  if (day === 0 || day === 6) return false;
-  const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
-  return mins >= 9 * 60 + 15 && mins <= 15 * 60 + 30;
-}
-
 function formatIST(ts: number): string {
   return new Date(ts).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
 }
