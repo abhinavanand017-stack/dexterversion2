@@ -1,8 +1,8 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
-  Home, BarChart3, Activity, Newspaper, Search, Eye, Target, Settings, Play, X, Menu, Brain,
-  LineChart, Calculator, Briefcase, Trophy, Receipt, Goal, Gauge, Coins, Grid3x3, FileSpreadsheet,
+  Home, BarChart3, Activity, Newspaper, Search, Target, Settings, Play, X, Menu, Brain,
+  LineChart, Calculator, Briefcase, Trophy, Receipt, Goal, Gauge, Coins, Grid3x3, FileSpreadsheet, GraduationCap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,

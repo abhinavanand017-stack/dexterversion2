@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WatchlistRouteImport } from './routes/watchlist'
 import { Route as TaxRouteImport } from './routes/tax'
 import { Route as SipRouteImport } from './routes/sip'
-import { Route as ShadowRouteImport } from './routes/shadow'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ScreenerRouteImport } from './routes/screener'
 import { Route as ScoreRouteImport } from './routes/score'
@@ -49,11 +48,6 @@ const TaxRoute = TaxRouteImport.update({
 const SipRoute = SipRouteImport.update({
   id: '/sip',
   path: '/sip',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ShadowRoute = ShadowRouteImport.update({
-  id: '/shadow',
-  path: '/shadow',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -190,7 +184,6 @@ export interface FileRoutesByFullPath {
   '/score': typeof ScoreRoute
   '/screener': typeof ScreenerRoute
   '/settings': typeof SettingsRoute
-  '/shadow': typeof ShadowRoute
   '/sip': typeof SipRoute
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
@@ -218,7 +211,6 @@ export interface FileRoutesByTo {
   '/score': typeof ScoreRoute
   '/screener': typeof ScreenerRoute
   '/settings': typeof SettingsRoute
-  '/shadow': typeof ShadowRoute
   '/sip': typeof SipRoute
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
@@ -247,7 +239,6 @@ export interface FileRoutesById {
   '/score': typeof ScoreRoute
   '/screener': typeof ScreenerRoute
   '/settings': typeof SettingsRoute
-  '/shadow': typeof ShadowRoute
   '/sip': typeof SipRoute
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
@@ -277,7 +268,6 @@ export interface FileRouteTypes {
     | '/score'
     | '/screener'
     | '/settings'
-    | '/shadow'
     | '/sip'
     | '/tax'
     | '/watchlist'
@@ -305,7 +295,6 @@ export interface FileRouteTypes {
     | '/score'
     | '/screener'
     | '/settings'
-    | '/shadow'
     | '/sip'
     | '/tax'
     | '/watchlist'
@@ -333,7 +322,6 @@ export interface FileRouteTypes {
     | '/score'
     | '/screener'
     | '/settings'
-    | '/shadow'
     | '/sip'
     | '/tax'
     | '/watchlist'
@@ -362,7 +350,6 @@ export interface RootRouteChildren {
   ScoreRoute: typeof ScoreRoute
   ScreenerRoute: typeof ScreenerRoute
   SettingsRoute: typeof SettingsRoute
-  ShadowRoute: typeof ShadowRoute
   SipRoute: typeof SipRoute
   TaxRoute: typeof TaxRoute
   WatchlistRoute: typeof WatchlistRoute
@@ -389,13 +376,6 @@ declare module '@tanstack/react-router' {
       path: '/sip'
       fullPath: '/sip'
       preLoaderRoute: typeof SipRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/shadow': {
-      id: '/shadow'
-      path: '/shadow'
-      fullPath: '/shadow'
-      preLoaderRoute: typeof ShadowRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -578,7 +558,6 @@ const rootRouteChildren: RootRouteChildren = {
   ScoreRoute: ScoreRoute,
   ScreenerRoute: ScreenerRoute,
   SettingsRoute: SettingsRoute,
-  ShadowRoute: ShadowRoute,
   SipRoute: SipRoute,
   TaxRoute: TaxRoute,
   WatchlistRoute: WatchlistRoute,
