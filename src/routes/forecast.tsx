@@ -1233,6 +1233,7 @@ function DeepResearchPanel({
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {/* DCF-Lite */}
+        {show("dcf") && (
         <DRCard title="18 · DCF-Lite" accent="#00d4ff">
           <div className="text-lg font-mono">{currency}{dcf.fairValue.toFixed(2)}</div>
           <div className="text-[11px] text-muted-foreground">
