@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WatchlistRouteImport } from './routes/watchlist'
 import { Route as TaxRouteImport } from './routes/tax'
 import { Route as SipRouteImport } from './routes/sip'
-import { Route as ShadowRouteImport } from './routes/shadow'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ScreenerRouteImport } from './routes/screener'
 import { Route as ScoreRouteImport } from './routes/score'
@@ -22,6 +21,7 @@ import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PitchRouteImport } from './routes/pitch'
 import { Route as OptimizerRouteImport } from './routes/optimizer'
 import { Route as NewsRouteImport } from './routes/news'
+import { Route as InvestmentMasterclassRouteImport } from './routes/investment-masterclass'
 import { Route as IndicesRouteImport } from './routes/indices'
 import { Route as HeatmapRouteImport } from './routes/heatmap'
 import { Route as GoalsRouteImport } from './routes/goals'
@@ -48,11 +48,6 @@ const TaxRoute = TaxRouteImport.update({
 const SipRoute = SipRouteImport.update({
   id: '/sip',
   path: '/sip',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ShadowRoute = ShadowRouteImport.update({
-  id: '/shadow',
-  path: '/shadow',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -98,6 +93,11 @@ const OptimizerRoute = OptimizerRouteImport.update({
 const NewsRoute = NewsRouteImport.update({
   id: '/news',
   path: '/news',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvestmentMasterclassRoute = InvestmentMasterclassRouteImport.update({
+  id: '/investment-masterclass',
+  path: '/investment-masterclass',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndicesRoute = IndicesRouteImport.update({
@@ -174,6 +174,7 @@ export interface FileRoutesByFullPath {
   '/goals': typeof GoalsRoute
   '/heatmap': typeof HeatmapRoute
   '/indices': typeof IndicesRoute
+  '/investment-masterclass': typeof InvestmentMasterclassRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
@@ -183,7 +184,6 @@ export interface FileRoutesByFullPath {
   '/score': typeof ScoreRoute
   '/screener': typeof ScreenerRoute
   '/settings': typeof SettingsRoute
-  '/shadow': typeof ShadowRoute
   '/sip': typeof SipRoute
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
@@ -201,6 +201,7 @@ export interface FileRoutesByTo {
   '/goals': typeof GoalsRoute
   '/heatmap': typeof HeatmapRoute
   '/indices': typeof IndicesRoute
+  '/investment-masterclass': typeof InvestmentMasterclassRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
@@ -210,7 +211,6 @@ export interface FileRoutesByTo {
   '/score': typeof ScoreRoute
   '/screener': typeof ScreenerRoute
   '/settings': typeof SettingsRoute
-  '/shadow': typeof ShadowRoute
   '/sip': typeof SipRoute
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
@@ -229,6 +229,7 @@ export interface FileRoutesById {
   '/goals': typeof GoalsRoute
   '/heatmap': typeof HeatmapRoute
   '/indices': typeof IndicesRoute
+  '/investment-masterclass': typeof InvestmentMasterclassRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
@@ -238,7 +239,6 @@ export interface FileRoutesById {
   '/score': typeof ScoreRoute
   '/screener': typeof ScreenerRoute
   '/settings': typeof SettingsRoute
-  '/shadow': typeof ShadowRoute
   '/sip': typeof SipRoute
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
@@ -258,6 +258,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/heatmap'
     | '/indices'
+    | '/investment-masterclass'
     | '/news'
     | '/optimizer'
     | '/pitch'
@@ -267,7 +268,6 @@ export interface FileRouteTypes {
     | '/score'
     | '/screener'
     | '/settings'
-    | '/shadow'
     | '/sip'
     | '/tax'
     | '/watchlist'
@@ -285,6 +285,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/heatmap'
     | '/indices'
+    | '/investment-masterclass'
     | '/news'
     | '/optimizer'
     | '/pitch'
@@ -294,7 +295,6 @@ export interface FileRouteTypes {
     | '/score'
     | '/screener'
     | '/settings'
-    | '/shadow'
     | '/sip'
     | '/tax'
     | '/watchlist'
@@ -312,6 +312,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/heatmap'
     | '/indices'
+    | '/investment-masterclass'
     | '/news'
     | '/optimizer'
     | '/pitch'
@@ -321,7 +322,6 @@ export interface FileRouteTypes {
     | '/score'
     | '/screener'
     | '/settings'
-    | '/shadow'
     | '/sip'
     | '/tax'
     | '/watchlist'
@@ -340,6 +340,7 @@ export interface RootRouteChildren {
   GoalsRoute: typeof GoalsRoute
   HeatmapRoute: typeof HeatmapRoute
   IndicesRoute: typeof IndicesRoute
+  InvestmentMasterclassRoute: typeof InvestmentMasterclassRoute
   NewsRoute: typeof NewsRoute
   OptimizerRoute: typeof OptimizerRoute
   PitchRoute: typeof PitchRoute
@@ -349,7 +350,6 @@ export interface RootRouteChildren {
   ScoreRoute: typeof ScoreRoute
   ScreenerRoute: typeof ScreenerRoute
   SettingsRoute: typeof SettingsRoute
-  ShadowRoute: typeof ShadowRoute
   SipRoute: typeof SipRoute
   TaxRoute: typeof TaxRoute
   WatchlistRoute: typeof WatchlistRoute
@@ -376,13 +376,6 @@ declare module '@tanstack/react-router' {
       path: '/sip'
       fullPath: '/sip'
       preLoaderRoute: typeof SipRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/shadow': {
-      id: '/shadow'
-      path: '/shadow'
-      fullPath: '/shadow'
-      preLoaderRoute: typeof ShadowRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -446,6 +439,13 @@ declare module '@tanstack/react-router' {
       path: '/news'
       fullPath: '/news'
       preLoaderRoute: typeof NewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/investment-masterclass': {
+      id: '/investment-masterclass'
+      path: '/investment-masterclass'
+      fullPath: '/investment-masterclass'
+      preLoaderRoute: typeof InvestmentMasterclassRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/indices': {
@@ -548,6 +548,7 @@ const rootRouteChildren: RootRouteChildren = {
   GoalsRoute: GoalsRoute,
   HeatmapRoute: HeatmapRoute,
   IndicesRoute: IndicesRoute,
+  InvestmentMasterclassRoute: InvestmentMasterclassRoute,
   NewsRoute: NewsRoute,
   OptimizerRoute: OptimizerRoute,
   PitchRoute: PitchRoute,
@@ -557,7 +558,6 @@ const rootRouteChildren: RootRouteChildren = {
   ScoreRoute: ScoreRoute,
   ScreenerRoute: ScreenerRoute,
   SettingsRoute: SettingsRoute,
-  ShadowRoute: ShadowRoute,
   SipRoute: SipRoute,
   TaxRoute: TaxRoute,
   WatchlistRoute: WatchlistRoute,

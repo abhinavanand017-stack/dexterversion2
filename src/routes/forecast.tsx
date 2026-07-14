@@ -119,6 +119,10 @@ function ForecastPage() {
 
   // Deep Research (Models 18–22) + Market Context + History
   const [deep, setDeep] = useState<DeepResearchResult | null>(null);
+  const [deepEnabled, setDeepEnabled] = useState<boolean>(true);
+  const [deepModels, setDeepModels] = useState<Set<"dcf" | "emom" | "bbrev" | "rs" | "quant">>(
+    () => new Set(["dcf", "emom", "bbrev", "rs", "quant"]),
+  );
   const [overrides, setOverrides] = useState<DeepOverrides>({ eps: null, epsCagr5y: null, revGrowth: null });
   const [vix, setVix] = useState<number | null>(null);
   const [n200Above, setN200Above] = useState<boolean | null>(null);
@@ -385,7 +389,7 @@ function ForecastPage() {
   // Deep Research (Models 18–22) — recompute whenever results/overrides/bars change
   useEffect(() => {
     let cancelled = false;
-    if (mode !== "stock" || !bars.length || !results.length) { setDeep(null); return; }
+    if (!deepEnabled || mode !== "stock" || !bars.length || !results.length) { setDeep(null); return; }
     (async () => {
       const rows = buildFeatures(bars);
       let benchBars: PriceBar[] | null = null;
@@ -402,7 +406,7 @@ function ForecastPage() {
       setDeep(dr);
     })();
     return () => { cancelled = true; };
-  }, [bars, results, overrides, pickedStock, mode, effectiveHorizon]);
+  }, [bars, results, overrides, pickedStock, mode, effectiveHorizon, deepEnabled]);
 
   // Push run into history when a new consensus completes
   useEffect(() => {
@@ -771,15 +775,61 @@ function ForecastPage() {
       )}
 
       {/* Deep Research (Models 18–22) — stock mode only */}
-      {mode === "stock" && deep && (
-        <DeepResearchPanel
-          deep={deep}
-          currency={meta.currency}
-          currentPrice={currentPrice}
-          overrides={overrides}
-          setOverrides={setOverrides}
-        />
+      {mode === "stock" && (
+        <div className="dx-glass p-3 border border-primary/25">
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+              <input type="checkbox" checked={deepEnabled} onChange={(e) => setDeepEnabled(e.target.checked)} />
+              🔬 Enable Deep Research (Models 18–22)
+            </label>
+            {deepEnabled && (
+              <div className="flex items-center gap-2 flex-wrap ml-auto">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Show:</span>
+                {([
+                  ["dcf", "DCF-Lite"],
+                  ["emom", "Earnings Momentum"],
+                  ["bbrev", "Bollinger Reversion"],
+                  ["rs", "Relative Strength"],
+                  ["quant", "Composite Quant"],
+                ] as const).map(([k, label]) => {
+                  const active = deepModels.has(k);
+                  return (
+                    <button
+                      key={k}
+                      onClick={() => setDeepModels((prev) => {
+                        const n = new Set(prev);
+                        if (n.has(k)) n.delete(k); else n.add(k);
+                        return n;
+                      })}
+                      className="px-2 py-1 text-[11px] rounded border transition"
+                      style={{
+                        borderColor: active ? "#a78bfa" : "rgba(255,255,255,0.15)",
+                        background: active ? "rgba(167,139,250,0.15)" : "transparent",
+                        color: active ? "#a78bfa" : "#94a3b8",
+                      }}
+                    >
+                      {active ? "✓ " : ""}{label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {deepEnabled && deep && (
+            <div className="mt-3">
+              <DeepResearchPanel
+                deep={deep}
+                currency={meta.currency}
+                currentPrice={currentPrice}
+                overrides={overrides}
+                setOverrides={setOverrides}
+                visible={deepModels}
+              />
+            </div>
+          )}
+        </div>
       )}
+
 
 
       {/* Charts */}
@@ -1139,14 +1189,16 @@ function FundBit({ label, val, fmt }: { label: string; val: number | undefined; 
 
 // ============= Deep Research (Models 18–22) =============
 function DeepResearchPanel({
-  deep, currency, currentPrice, overrides, setOverrides,
+  deep, currency, currentPrice, overrides, setOverrides, visible,
 }: {
   deep: DeepResearchResult;
   currency: string;
   currentPrice: number;
   overrides: DeepOverrides;
   setOverrides: React.Dispatch<React.SetStateAction<DeepOverrides>>;
+  visible?: Set<"dcf" | "emom" | "bbrev" | "rs" | "quant">;
 }) {
+  const show = (k: "dcf" | "emom" | "bbrev" | "rs" | "quant") => !visible || visible.has(k);
   const { dcf, emom, bbrev, rs, quant } = deep;
   const setNum = (k: keyof DeepOverrides) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
@@ -1181,6 +1233,7 @@ function DeepResearchPanel({
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {/* DCF-Lite */}
+        {show("dcf") && (
         <DRCard title="18 · DCF-Lite" accent="#00d4ff">
           <div className="text-lg font-mono">{currency}{dcf.fairValue.toFixed(2)}</div>
           <div className="text-[11px] text-muted-foreground">
@@ -1194,8 +1247,10 @@ function DeepResearchPanel({
           </div>
           {dcf.note && <div className="text-[10px] text-amber-400/70 mt-1">{dcf.note}</div>}
         </DRCard>
+        )}
 
         {/* Earnings Momentum gauge */}
+        {show("emom") && (
         <DRCard title="19 · Earnings Momentum" accent="#00ff88">
           <div className="text-lg font-mono">{emom.score.toFixed(0)}<span className="text-muted-foreground text-xs">/100</span></div>
           <div className="h-1.5 bg-muted rounded mt-1">
@@ -1206,8 +1261,10 @@ function DeepResearchPanel({
           </div>
           <div className="text-[10px] text-muted-foreground">Target shift {emom.targetShift >= 0 ? "+" : ""}{emom.targetShift.toFixed(2)}%</div>
         </DRCard>
+        )}
 
         {/* Bollinger Reversion */}
+        {show("bbrev") && (
         <DRCard title="20 · Bollinger Reversion" accent="#ffaa00">
           <div className="text-lg font-mono">{currency}{bbrev.target.toFixed(2)}</div>
           <div className="text-[11px] text-muted-foreground">
@@ -1218,8 +1275,10 @@ function DeepResearchPanel({
             · Bands {currency}{bbrev.bandLower.toFixed(1)} – {currency}{bbrev.bandUpper.toFixed(1)}
           </div>
         </DRCard>
+        )}
 
         {/* Relative Strength */}
+        {show("rs") && (
         <DRCard title="21 · Relative Strength" accent="#a78bfa">
           <div className="text-lg font-mono" style={{ color: rs.rs >= 0 ? "#00ff88" : "#ff4466" }}>
             {rs.rs >= 0 ? "+" : ""}{rs.rs.toFixed(2)} pp
@@ -1232,8 +1291,10 @@ function DeepResearchPanel({
             <div className="h-full rounded" style={{ width: `${rs.score}%`, background: rs.score >= 55 ? "#00ff88" : rs.score >= 45 ? "#ffaa00" : "#ff4466" }} />
           </div>
         </DRCard>
+        )}
 
         {/* Composite Quant Score with hexagonal radar */}
+        {show("quant") && (
         <div className="p-3 rounded-lg border md:col-span-2 lg:col-span-2" style={{ borderColor: "#00ff8830", background: "#0d1117" }}>
           <div className="flex items-center gap-2">
             <div className="text-sm font-semibold">22 · Composite Quant Score</div>
@@ -1243,6 +1304,7 @@ function DeepResearchPanel({
           </div>
           <QuantRadar axes={quant.axes} />
         </div>
+        )}
       </div>
     </div>
   );

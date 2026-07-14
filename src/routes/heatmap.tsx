@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { RefreshCw } from "lucide-react";
 import { getNseHeatmap, type HeatmapIndex, type HeatmapCategory } from "@/lib/heatmap.functions";
+import { useMarketStatus } from "@/hooks/useMarketStatus";
 
 export const Route = createFileRoute("/heatmap")({
   head: () => ({
@@ -31,15 +32,6 @@ function colorFor(pct: number): string {
   return "#7f1d1d";
 }
 
-function isMarketOpen(now = new Date()): boolean {
-  // IST = UTC+5:30
-  const ist = new Date(now.getTime() + (330 - now.getTimezoneOffset()) * 60000);
-  const day = ist.getUTCDay(); // now in IST-shifted, use UTC accessors
-  if (day === 0 || day === 6) return false;
-  const mins = ist.getUTCHours() * 60 + ist.getUTCMinutes();
-  return mins >= 9 * 60 + 15 && mins <= 15 * 60 + 30;
-}
-
 function formatIST(ts: number): string {
   return new Date(ts).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true, timeZone: "Asia/Kolkata" });
 }
@@ -53,7 +45,8 @@ function HeatmapPage() {
   const [lastTs, setLastTs] = useState<number | null>(null);
   const [nowMs, setNowMs] = useState<number>(Date.now());
   const [hover, setHover] = useState<{ row: HeatmapIndex; x: number; y: number } | null>(null);
-  const marketOpen = useMemo(() => isMarketOpen(new Date(nowMs)), [nowMs]);
+  const marketStatus = useMarketStatus();
+  const marketOpen = marketStatus.status === "open";
   const abortRef = useRef<number>(0);
 
   const load = useCallback(async (cat: HeatmapCategory) => {
@@ -120,9 +113,9 @@ function HeatmapPage() {
           <p className="text-sm text-muted-foreground">Live NSE indices — color coded by 1-day % change</p>
         </div>
         <div className="flex items-center gap-3 text-xs">
-          <span className={`flex items-center gap-1.5 px-2 py-1 rounded border ${marketOpen ? "border-green-500/40 text-green-400" : "border-amber-500/40 text-amber-400"}`}>
-            <span className={`inline-block w-1.5 h-1.5 rounded-full ${marketOpen ? "bg-green-500 animate-pulse" : "bg-amber-500"}`} />
-            {marketOpen ? "MARKET OPEN" : "MARKET CLOSED"}
+          <span className={`flex items-center gap-1.5 px-2 py-1 rounded border`} style={{ borderColor: marketStatus.color + "66", color: marketStatus.color }}>
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${marketOpen ? "animate-pulse" : ""}`} style={{ background: marketStatus.color }} />
+            {marketStatus.label.toUpperCase()}
           </span>
           <span className="flex items-center gap-1.5 text-muted-foreground">
             <span className={`inline-block w-1.5 h-1.5 rounded-full ${isStale ? "bg-amber-400" : "bg-green-500 animate-pulse"}`} />

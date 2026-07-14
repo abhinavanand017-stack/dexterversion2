@@ -1,8 +1,8 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
-  Home, BarChart3, Activity, Newspaper, Search, Eye, Target, Settings, Play, X, Menu, Brain,
-  LineChart, Calculator, Briefcase, Trophy, Receipt, Goal, Gauge, Coins, Grid3x3, FileSpreadsheet,
+  Home, BarChart3, Activity, Newspaper, Search, Target, Settings, Play, X, Menu, Brain,
+  LineChart, Calculator, Briefcase, Trophy, Receipt, Goal, Gauge, Coins, Grid3x3, FileSpreadsheet, GraduationCap,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -27,12 +27,12 @@ export const NAV_ITEMS = [
   { to: "/community", label: "Community", icon: Trophy },
   { to: "/biometrics", label: "Biometrics Lab", icon: Activity },
   { to: "/news", label: "Market News", icon: Newspaper },
-  { to: "/shadow", label: "Shadow Portfolio", icon: Eye },
+  { to: "/investment-masterclass", label: "Investment Masterclass", icon: GraduationCap },
   { to: "/score", label: "Dexter Score", icon: Target },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
-const TOUR_PATH = ["/", "/biometrics", "/shadow", "/score", "/optimizer", "/news"] as const;
+const TOUR_PATH = ["/", "/biometrics", "/investment-masterclass", "/score", "/optimizer", "/news"] as const;
 const TOUR_STEP_MS = 5000;
 
 export function AppSidebar() {
