@@ -775,15 +775,61 @@ function ForecastPage() {
       )}
 
       {/* Deep Research (Models 18–22) — stock mode only */}
-      {mode === "stock" && deep && (
-        <DeepResearchPanel
-          deep={deep}
-          currency={meta.currency}
-          currentPrice={currentPrice}
-          overrides={overrides}
-          setOverrides={setOverrides}
-        />
+      {mode === "stock" && (
+        <div className="dx-glass p-3 border border-primary/25">
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+              <input type="checkbox" checked={deepEnabled} onChange={(e) => setDeepEnabled(e.target.checked)} />
+              🔬 Enable Deep Research (Models 18–22)
+            </label>
+            {deepEnabled && (
+              <div className="flex items-center gap-2 flex-wrap ml-auto">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Show:</span>
+                {([
+                  ["dcf", "DCF-Lite"],
+                  ["emom", "Earnings Momentum"],
+                  ["bbrev", "Bollinger Reversion"],
+                  ["rs", "Relative Strength"],
+                  ["quant", "Composite Quant"],
+                ] as const).map(([k, label]) => {
+                  const active = deepModels.has(k);
+                  return (
+                    <button
+                      key={k}
+                      onClick={() => setDeepModels((prev) => {
+                        const n = new Set(prev);
+                        if (n.has(k)) n.delete(k); else n.add(k);
+                        return n;
+                      })}
+                      className="px-2 py-1 text-[11px] rounded border transition"
+                      style={{
+                        borderColor: active ? "#a78bfa" : "rgba(255,255,255,0.15)",
+                        background: active ? "rgba(167,139,250,0.15)" : "transparent",
+                        color: active ? "#a78bfa" : "#94a3b8",
+                      }}
+                    >
+                      {active ? "✓ " : ""}{label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          {deepEnabled && deep && (
+            <div className="mt-3">
+              <DeepResearchPanel
+                deep={deep}
+                currency={meta.currency}
+                currentPrice={currentPrice}
+                overrides={overrides}
+                setOverrides={setOverrides}
+                visible={deepModels}
+              />
+            </div>
+          )}
+        </div>
       )}
+
 
 
       {/* Charts */}
