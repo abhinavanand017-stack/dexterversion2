@@ -1275,8 +1275,10 @@ function DeepResearchPanel({
             · Bands {currency}{bbrev.bandLower.toFixed(1)} – {currency}{bbrev.bandUpper.toFixed(1)}
           </div>
         </DRCard>
+        )}
 
         {/* Relative Strength */}
+        {show("rs") && (
         <DRCard title="21 · Relative Strength" accent="#a78bfa">
           <div className="text-lg font-mono" style={{ color: rs.rs >= 0 ? "#00ff88" : "#ff4466" }}>
             {rs.rs >= 0 ? "+" : ""}{rs.rs.toFixed(2)} pp
