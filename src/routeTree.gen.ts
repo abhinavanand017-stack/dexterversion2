@@ -22,6 +22,7 @@ import { Route as PortfolioRouteImport } from './routes/portfolio'
 import { Route as PitchRouteImport } from './routes/pitch'
 import { Route as OptimizerRouteImport } from './routes/optimizer'
 import { Route as NewsRouteImport } from './routes/news'
+import { Route as InvestmentMasterclassRouteImport } from './routes/investment-masterclass'
 import { Route as IndicesRouteImport } from './routes/indices'
 import { Route as HeatmapRouteImport } from './routes/heatmap'
 import { Route as GoalsRouteImport } from './routes/goals'
@@ -100,6 +101,11 @@ const NewsRoute = NewsRouteImport.update({
   path: '/news',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InvestmentMasterclassRoute = InvestmentMasterclassRouteImport.update({
+  id: '/investment-masterclass',
+  path: '/investment-masterclass',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndicesRoute = IndicesRouteImport.update({
   id: '/indices',
   path: '/indices',
@@ -174,6 +180,7 @@ export interface FileRoutesByFullPath {
   '/goals': typeof GoalsRoute
   '/heatmap': typeof HeatmapRoute
   '/indices': typeof IndicesRoute
+  '/investment-masterclass': typeof InvestmentMasterclassRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
@@ -201,6 +208,7 @@ export interface FileRoutesByTo {
   '/goals': typeof GoalsRoute
   '/heatmap': typeof HeatmapRoute
   '/indices': typeof IndicesRoute
+  '/investment-masterclass': typeof InvestmentMasterclassRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
@@ -229,6 +237,7 @@ export interface FileRoutesById {
   '/goals': typeof GoalsRoute
   '/heatmap': typeof HeatmapRoute
   '/indices': typeof IndicesRoute
+  '/investment-masterclass': typeof InvestmentMasterclassRoute
   '/news': typeof NewsRoute
   '/optimizer': typeof OptimizerRoute
   '/pitch': typeof PitchRoute
@@ -258,6 +267,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/heatmap'
     | '/indices'
+    | '/investment-masterclass'
     | '/news'
     | '/optimizer'
     | '/pitch'
@@ -285,6 +295,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/heatmap'
     | '/indices'
+    | '/investment-masterclass'
     | '/news'
     | '/optimizer'
     | '/pitch'
@@ -312,6 +323,7 @@ export interface FileRouteTypes {
     | '/goals'
     | '/heatmap'
     | '/indices'
+    | '/investment-masterclass'
     | '/news'
     | '/optimizer'
     | '/pitch'
@@ -340,6 +352,7 @@ export interface RootRouteChildren {
   GoalsRoute: typeof GoalsRoute
   HeatmapRoute: typeof HeatmapRoute
   IndicesRoute: typeof IndicesRoute
+  InvestmentMasterclassRoute: typeof InvestmentMasterclassRoute
   NewsRoute: typeof NewsRoute
   OptimizerRoute: typeof OptimizerRoute
   PitchRoute: typeof PitchRoute
@@ -448,6 +461,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NewsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/investment-masterclass': {
+      id: '/investment-masterclass'
+      path: '/investment-masterclass'
+      fullPath: '/investment-masterclass'
+      preLoaderRoute: typeof InvestmentMasterclassRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/indices': {
       id: '/indices'
       path: '/indices'
@@ -548,6 +568,7 @@ const rootRouteChildren: RootRouteChildren = {
   GoalsRoute: GoalsRoute,
   HeatmapRoute: HeatmapRoute,
   IndicesRoute: IndicesRoute,
+  InvestmentMasterclassRoute: InvestmentMasterclassRoute,
   NewsRoute: NewsRoute,
   OptimizerRoute: OptimizerRoute,
   PitchRoute: PitchRoute,
