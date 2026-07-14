@@ -27,7 +27,7 @@ export const NAV_ITEMS = [
   { to: "/community", label: "Community", icon: Trophy },
   { to: "/biometrics", label: "Biometrics Lab", icon: Activity },
   { to: "/news", label: "Market News", icon: Newspaper },
-  { to: "/shadow", label: "Shadow Portfolio", icon: Eye },
+  { to: "/investment-masterclass", label: "Investment Masterclass", icon: GraduationCap },
   { to: "/score", label: "Dexter Score", icon: Target },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
