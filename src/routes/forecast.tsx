@@ -1291,8 +1291,10 @@ function DeepResearchPanel({
             <div className="h-full rounded" style={{ width: `${rs.score}%`, background: rs.score >= 55 ? "#00ff88" : rs.score >= 45 ? "#ffaa00" : "#ff4466" }} />
           </div>
         </DRCard>
+        )}
 
         {/* Composite Quant Score with hexagonal radar */}
+        {show("quant") && (
         <div className="p-3 rounded-lg border md:col-span-2 lg:col-span-2" style={{ borderColor: "#00ff8830", background: "#0d1117" }}>
           <div className="flex items-center gap-2">
             <div className="text-sm font-semibold">22 · Composite Quant Score</div>
