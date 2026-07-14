@@ -1261,8 +1261,10 @@ function DeepResearchPanel({
           </div>
           <div className="text-[10px] text-muted-foreground">Target shift {emom.targetShift >= 0 ? "+" : ""}{emom.targetShift.toFixed(2)}%</div>
         </DRCard>
+        )}
 
         {/* Bollinger Reversion */}
+        {show("bbrev") && (
         <DRCard title="20 · Bollinger Reversion" accent="#ffaa00">
           <div className="text-lg font-mono">{currency}{bbrev.target.toFixed(2)}</div>
           <div className="text-[11px] text-muted-foreground">
