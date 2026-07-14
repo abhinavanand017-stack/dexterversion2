@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { RefreshCw } from "lucide-react";
 import { getNseHeatmap, type HeatmapIndex, type HeatmapCategory } from "@/lib/heatmap.functions";
+import { useMarketStatus } from "@/hooks/useMarketStatus";
 
 export const Route = createFileRoute("/heatmap")({
   head: () => ({
