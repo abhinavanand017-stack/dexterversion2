@@ -113,9 +113,9 @@ function HeatmapPage() {
           <p className="text-sm text-muted-foreground">Live NSE indices — color coded by 1-day % change</p>
         </div>
         <div className="flex items-center gap-3 text-xs">
-          <span className={`flex items-center gap-1.5 px-2 py-1 rounded border ${marketOpen ? "border-green-500/40 text-green-400" : "border-amber-500/40 text-amber-400"}`}>
-            <span className={`inline-block w-1.5 h-1.5 rounded-full ${marketOpen ? "bg-green-500 animate-pulse" : "bg-amber-500"}`} />
-            {marketOpen ? "MARKET OPEN" : "MARKET CLOSED"}
+          <span className={`flex items-center gap-1.5 px-2 py-1 rounded border`} style={{ borderColor: marketStatus.color + "66", color: marketStatus.color }}>
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${marketOpen ? "animate-pulse" : ""}`} style={{ background: marketStatus.color }} />
+            {marketStatus.label.toUpperCase()}
           </span>
           <span className="flex items-center gap-1.5 text-muted-foreground">
             <span className={`inline-block w-1.5 h-1.5 rounded-full ${isStale ? "bg-amber-400" : "bg-green-500 animate-pulse"}`} />
