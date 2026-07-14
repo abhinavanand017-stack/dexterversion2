@@ -119,6 +119,10 @@ function ForecastPage() {
 
   // Deep Research (Models 18–22) + Market Context + History
   const [deep, setDeep] = useState<DeepResearchResult | null>(null);
+  const [deepEnabled, setDeepEnabled] = useState<boolean>(true);
+  const [deepModels, setDeepModels] = useState<Set<"dcf" | "emom" | "bbrev" | "rs" | "quant">>(
+    () => new Set(["dcf", "emom", "bbrev", "rs", "quant"]),
+  );
   const [overrides, setOverrides] = useState<DeepOverrides>({ eps: null, epsCagr5y: null, revGrowth: null });
   const [vix, setVix] = useState<number | null>(null);
   const [n200Above, setN200Above] = useState<boolean | null>(null);
