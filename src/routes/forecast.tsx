@@ -1247,8 +1247,10 @@ function DeepResearchPanel({
           </div>
           {dcf.note && <div className="text-[10px] text-amber-400/70 mt-1">{dcf.note}</div>}
         </DRCard>
+        )}
 
         {/* Earnings Momentum gauge */}
+        {show("emom") && (
         <DRCard title="19 · Earnings Momentum" accent="#00ff88">
           <div className="text-lg font-mono">{emom.score.toFixed(0)}<span className="text-muted-foreground text-xs">/100</span></div>
           <div className="h-1.5 bg-muted rounded mt-1">
