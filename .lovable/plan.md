@@ -1,48 +1,67 @@
-# Forecaster V2 — Universe + Deep Research + Accuracy
+## Investment Masterclass 2.0 — Rebuild Plan
 
-Your pasted spec has 4 large parts. `src/lib/nifty500.ts` already ships **525 unique symbols** across Nifty 50 / Next 50 / Midcap 150 / Smallcap 250 buckets, so Part 1 is largely done and needs only a targeted top-up. The genuinely new work is Parts 2–4. Splitting into 3 turns keeps each turn under 1.5 credits.
+Rebuild `/investment-masterclass` content only. Keep sidebar, ticker, footer, hero shell.
 
-## Turn A — Universe top-up + Screener deeplink + Fundamentals snapshot
+### Scope decisions (to confirm before I build)
 
-Files touched: `src/lib/nifty500.ts`, `src/lib/screener.ts` (new), `src/routes/forecast.tsx`, `src/components/AssetCombobox.tsx`.
+1. **Backend**: You asked for Supabase tables + RLS + seed migration. That's a lot of migration surface for content that never changes per-user (investors, books, playbooks are static). I recommend:
+   - **Static TS data** for `investors`, `books`, `playbooks` (shipped in `src/lib/masterclass/*.ts`) — instant load, no fetch, no RLS, easy to extend.
+   - **Supabase tables only for user state**: `user_reading_list`, `user_checklist_progress`, `user_style_matches` (RLS by `auth.uid()`).
+   - If you want everything in Supabase anyway, say so and I'll do all 6 tables.
 
-- Diff pasted spec against existing `NIFTY500`; append only missing symbols (est. 40–80 new). Keep the existing `NiftyStock` shape; add optional `cmp?`, `pe?`, `roce?`, `divYld?`, `marCap?`, `qtrProfitVar?`, `qtrSalesVar?`, `debtEquity?` fields on the seeded rows so Models 18–22 have data.
-- New `src/lib/screener.ts` exports `toScreenerUrl(symbol)` and `toYahooSymbol(symbol)` (URL-encodes `&`, `.`).
-- Forecast page: add "📊 Deep Research on Screener.in →" button next to the selected symbol (opens `screener.in/company/{SYMBOL}/consolidated/` in new tab), and a compact **Fundamentals Snapshot** card (PE / ROCE / DivYld / Qtr Profit Var / Debt/Equity) sourced from the seed data with graceful "—" when a field is missing.
+2. **Auth**: User-state tables require login. The app currently has no auth surface I've wired for this page. Options:
+   - **A**: Persist user state in `localStorage` only (no login needed, works today).
+   - **B**: Add Supabase tables + require sign-in for reading list / checklist / quiz result save.
+   - Recommend **A** for v1 (fast, no auth friction on an education page), migrate to B later.
 
-## Turn B — Deep Research models 18–22
+### File plan
 
-Files: `src/lib/forecast/deepResearch.ts` (new), `src/lib/forecast/models.ts` (register), `src/routes/forecast.tsx` (new "🔬 Deep Research" section in model grid + radar chart).
+**New data (static seed):**
+- `src/lib/masterclass/investors.ts` — 50 investors (30 global + 20 India) with all fields from §2
+- `src/lib/masterclass/books.ts` — 25 core + 5 India shelf
+- `src/lib/masterclass/playbooks.ts` — 8 frameworks with `interactive_config`
+- `src/lib/masterclass/quotes.ts` — ~20 rotating hero quotes
+- `src/lib/masterclass/types.ts`
 
-- Model 18 DCF-Lite: fair value line + margin-of-safety band on the existing chart.
-- Model 19 Earnings Momentum: 0–100 gauge, adjusts price target.
-- Model 20 Bollinger Mean Reversion: bands overlay + reversion target.
-- Model 21 Relative Strength vs bucket index (Nifty 50 / Next 50 / Midcap 150).
-- Model 22 Composite Quant Score: pure-SVG hexagonal radar (6 axes), integrates outputs from 18–21 + existing consensus.
-- 3 manual override inputs (EPS, 5Y EPS CAGR %, Rev Growth %) that recompute Models 18/22 instantly.
+**New components (under `src/components/masterclass/`):**
+- `MasterclassPage.tsx` — top-level tabs (Legends / Reading Room / Playbooks / Style Matcher / Compare) + hero
+- `LegendsTab.tsx` — filter bar (category chips, search, era slider), card grid
+- `InvestorDetail.tsx` — full detail panel (philosophy, blueprint donut, framework, case study, quote, recommended books)
+- `ReadingRoom.tsx` — book grid, tag filter, India shelf row, reading-list toggle
+- `PlaybooksTab.tsx` — 8 interactive playbook cards (moat checklist, margin-of-safety calc, QGLP scorecard, SMILE, Kelly sizing, cycle gauge, compounder score, behavioral checklist)
+- `StyleMatcher.tsx` — 6-question quiz + results screen with recommendations
+- `CompareTab.tsx` — multi-select up to 3, side-by-side table
+- `CompoundingSandbox.tsx` — shared, Recharts line chart with sliders
+- `InvestorChecklist.tsx` — shared, tappable, persists to localStorage
 
-## Turn C — Accuracy & realism layer
+**Route:**
+- Rewrite `src/routes/investment-masterclass.tsx` to render new `MasterclassPage`
+- Optional child route `/investment-masterclass/legends/$slug` for deep-links (or use in-page panel — recommend in-page for speed)
 
-Files: `src/routes/forecast.tsx`, `src/lib/forecast/accuracy.ts` (new).
+**Replace/deprecate:**
+- Replace `src/components/InvestmentMasterclass.tsx` with a re-export of the new page (or delete and update the route import)
 
-- Remove any synthetic OHLCV fallback in the current forecast path; surface an explicit "⚠️ Could not fetch historical data" state instead of silent seeded data.
-- Per-model "±X%" historical-accuracy badge (static table from spec §4.2), colour-coded.
-- **Model Consensus** summary card (direction, P10–P90 range, median, agreement strength, plain-language sentence).
-- **Market Context** banner using existing VIX + Nifty 200 DMA signals.
-- **"How accurate were past forecasts?"** collapsible reading last 5 runs from a new `dx_forecast_history_v1` localStorage key (write on every forecast run).
-- Update disclaimer text per spec §technical notes.
+### Roster & seed content
 
-## Out of scope (unless you say otherwise)
+I'll seed all 50 investors and 30 books exactly as you listed, with:
+- Bios / principles / anti-patterns written from general public knowledge
+- Every stat labeled "approx. / historical, educational only"
+- Quotes marked `verified: false` unless well-documented — never fabricated attribution
+- Placeholder avatars = gradient monogram (initials on teal/navy gradient), no scraped photos
 
-- Live scraping of Screener.in — spec explicitly forbids it; we deeplink + seed only.
-- Peer Comparison panel (§3.3) — cheap add-on, roll into Turn A if you want it.
-- Simple-Mode collapse of 18–22 into a single card — roll into Turn B if you want it.
+### Design
 
-## Technical notes
+Reuse existing dark-navy glass card + teal accent classes from `/heatmap` and `/screener`. Recharts for donuts + compounding chart, matching Optimizer's palette. Mobile: tab chip scroller + 1-col grid + full-screen detail sheet.
 
-- Combobox already uses cmdk (virtualised) — no perf change needed at ~600 rows.
-- Radar in Turn B stays pure SVG (no new dep), reusing existing neon CSS vars.
-- All new localStorage writes wrapped in try/catch.
-- Zero changes to sidebar, routing, other pages, dark cyberpunk theme.
+### Out of scope (unless you say otherwise)
 
-Reply **"go A"** (or B / C / all) and I'll start. Say "add peer panel" or "add simple-mode collapse" to fold those into their turn.
+- Wiring quiz result into Signal Engine tone personalization (mentioned as "later")
+- Deep-link routes per investor (in-page panel instead — say the word and I'll add them)
+- Book cover images (gradient monograms instead of external image fetches)
+
+### Please confirm
+
+**Q1**: Static TS data + localStorage user state (option A), or full Supabase tables (option B)?
+**Q2**: In-page investor detail panel, or dedicated `/legends/$slug` routes?
+
+Once you confirm, I'll ship it in one pass.
