@@ -26,7 +26,7 @@ import { Route as IndicesRouteImport } from './routes/indices'
 import { Route as HeatmapRouteImport } from './routes/heatmap'
 import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as FundsRouteImport } from './routes/funds'
-import { Route as ForecastRouteImport } from './routes/forecast'
+import { Route as ForecastClassicRouteImport } from './routes/forecast-classic'
 import { Route as EtfsRouteImport } from './routes/etfs'
 import { Route as DematRouteImport } from './routes/demat'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -120,9 +120,9 @@ const FundsRoute = FundsRouteImport.update({
   path: '/funds',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ForecastRoute = ForecastRouteImport.update({
-  id: '/forecast',
-  path: '/forecast',
+const ForecastClassicRoute = ForecastClassicRouteImport.update({
+  id: '/forecast-classic',
+  path: '/forecast-classic',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EtfsRoute = EtfsRouteImport.update({
@@ -169,7 +169,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
   '/etfs': typeof EtfsRoute
-  '/forecast': typeof ForecastRoute
+  '/forecast-classic': typeof ForecastClassicRoute
   '/funds': typeof FundsRoute
   '/goals': typeof GoalsRoute
   '/heatmap': typeof HeatmapRoute
@@ -196,7 +196,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
   '/etfs': typeof EtfsRoute
-  '/forecast': typeof ForecastRoute
+  '/forecast-classic': typeof ForecastClassicRoute
   '/funds': typeof FundsRoute
   '/goals': typeof GoalsRoute
   '/heatmap': typeof HeatmapRoute
@@ -224,7 +224,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/demat': typeof DematRoute
   '/etfs': typeof EtfsRoute
-  '/forecast': typeof ForecastRoute
+  '/forecast-classic': typeof ForecastClassicRoute
   '/funds': typeof FundsRoute
   '/goals': typeof GoalsRoute
   '/heatmap': typeof HeatmapRoute
@@ -253,7 +253,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/demat'
     | '/etfs'
-    | '/forecast'
+    | '/forecast-classic'
     | '/funds'
     | '/goals'
     | '/heatmap'
@@ -280,7 +280,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/demat'
     | '/etfs'
-    | '/forecast'
+    | '/forecast-classic'
     | '/funds'
     | '/goals'
     | '/heatmap'
@@ -307,7 +307,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/demat'
     | '/etfs'
-    | '/forecast'
+    | '/forecast-classic'
     | '/funds'
     | '/goals'
     | '/heatmap'
@@ -335,7 +335,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   DematRoute: typeof DematRoute
   EtfsRoute: typeof EtfsRoute
-  ForecastRoute: typeof ForecastRoute
+  ForecastClassicRoute: typeof ForecastClassicRoute
   FundsRoute: typeof FundsRoute
   GoalsRoute: typeof GoalsRoute
   HeatmapRoute: typeof HeatmapRoute
@@ -476,11 +476,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FundsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/forecast': {
-      id: '/forecast'
-      path: '/forecast'
-      fullPath: '/forecast'
-      preLoaderRoute: typeof ForecastRouteImport
+    '/forecast-classic': {
+      id: '/forecast-classic'
+      path: '/forecast-classic'
+      fullPath: '/forecast-classic'
+      preLoaderRoute: typeof ForecastClassicRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/etfs': {
@@ -543,7 +543,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   DematRoute: DematRoute,
   EtfsRoute: EtfsRoute,
-  ForecastRoute: ForecastRoute,
+  ForecastClassicRoute: ForecastClassicRoute,
   FundsRoute: FundsRoute,
   GoalsRoute: GoalsRoute,
   HeatmapRoute: HeatmapRoute,
@@ -565,13 +565,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
