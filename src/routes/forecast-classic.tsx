@@ -16,7 +16,7 @@ import { fetchYahooChart } from "@/lib/yahoo.functions";
 import { runDeepResearch, type DeepResearchResult, type DeepOverrides } from "@/lib/forecast/deepResearch";
 import { MODEL_ACCURACY, accuracyColor, plainConsensus, pushHistory, readHistory, assessVix, bucketBenchmark, type HistoryEntry } from "@/lib/forecast/accuracy";
 
-export const Route = createFileRoute("/forecast")({
+export const Route = createFileRoute("/forecast-classic")({
   validateSearch: (s: Record<string, unknown>) => ({
     index: typeof s.index === "string" ? s.index : undefined,
     tier: s.tier === "long" || s.tier === "short" ? s.tier : undefined,
