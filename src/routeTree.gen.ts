@@ -34,6 +34,7 @@ import { Route as CommunityRouteImport } from './routes/community'
 import { Route as BiometricsRouteImport } from './routes/biometrics'
 import { Route as BacktesterRouteImport } from './routes/backtester'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiForecastRouteImport } from './routes/api/forecast'
 
 const WatchlistRoute = WatchlistRouteImport.update({
   id: '/watchlist',
@@ -160,6 +161,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiForecastRoute = ApiForecastRouteImport.update({
+  id: '/api/forecast',
+  path: '/api/forecast',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -187,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/sip': typeof SipRoute
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
+  '/api/forecast': typeof ApiForecastRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -214,6 +221,7 @@ export interface FileRoutesByTo {
   '/sip': typeof SipRoute
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
+  '/api/forecast': typeof ApiForecastRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -242,6 +250,7 @@ export interface FileRoutesById {
   '/sip': typeof SipRoute
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
+  '/api/forecast': typeof ApiForecastRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -271,6 +280,7 @@ export interface FileRouteTypes {
     | '/sip'
     | '/tax'
     | '/watchlist'
+    | '/api/forecast'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -298,6 +308,7 @@ export interface FileRouteTypes {
     | '/sip'
     | '/tax'
     | '/watchlist'
+    | '/api/forecast'
   id:
     | '__root__'
     | '/'
@@ -325,6 +336,7 @@ export interface FileRouteTypes {
     | '/sip'
     | '/tax'
     | '/watchlist'
+    | '/api/forecast'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -353,6 +365,7 @@ export interface RootRouteChildren {
   SipRoute: typeof SipRoute
   TaxRoute: typeof TaxRoute
   WatchlistRoute: typeof WatchlistRoute
+  ApiForecastRoute: typeof ApiForecastRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -532,6 +545,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/forecast': {
+      id: '/api/forecast'
+      path: '/api/forecast'
+      fullPath: '/api/forecast'
+      preLoaderRoute: typeof ApiForecastRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -561,6 +581,7 @@ const rootRouteChildren: RootRouteChildren = {
   SipRoute: SipRoute,
   TaxRoute: TaxRoute,
   WatchlistRoute: WatchlistRoute,
+  ApiForecastRoute: ApiForecastRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
