@@ -405,8 +405,8 @@ function Leaderboard({ models }: { models: ModelForecast[] }) {
           </thead>
           <tbody>
             {sorted.map((m) => (
-              <>
-                <tr key={m.name} onClick={() => setExpanded(expanded === m.name ? null : m.name)}
+              <Fragment key={m.name}>
+                <tr onClick={() => setExpanded(expanded === m.name ? null : m.name)}
                   className="cursor-pointer hover:bg-[#0d1728]" style={{ borderBottom: `1px solid ${BORDER}` }}>
                   <td className="px-3 py-2.5 flex items-center gap-2">
                     {expanded === m.name ? <ChevronDown size={14} style={{ color: TEXT_DIM }} /> : <ChevronRight size={14} style={{ color: TEXT_DIM }} />}
@@ -421,7 +421,7 @@ function Leaderboard({ models }: { models: ModelForecast[] }) {
                   <td className="px-3 py-2.5 text-right text-xs" style={{ color: TEXT_DIM }}>{m.lastBacktestDate}</td>
                 </tr>
                 {expanded === m.name && (
-                  <tr key={`${m.name}-exp`} style={{ background: "#0a1121" }}>
+                  <tr style={{ background: "#0a1121" }}>
                     <td colSpan={8} className="px-4 py-3">
                       <div className="text-xs mb-2" style={{ color: TEXT_DIM }}>Last 30 predictions vs actual · Predicted target: <span style={{ color: GOLD }}>₹{m.predictedPrice.toFixed(2)}</span></div>
                       <ResponsiveContainer width="100%" height={140}>
@@ -437,7 +437,7 @@ function Leaderboard({ models }: { models: ModelForecast[] }) {
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             ))}
           </tbody>
         </table>
