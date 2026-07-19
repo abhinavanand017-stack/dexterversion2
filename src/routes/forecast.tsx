@@ -76,12 +76,14 @@ function hash(s: string) { let h = 2166136261; for (let i = 0; i < s.length; i++
 function rnd(seed: number) { return () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 function synthBars(seed: string, basePrice: number, days = 1500) {
   const r = rnd(hash(seed));
-  const bars: { t: number; c: number }[] = [];
+  const bars: { t: number; o: number; h: number; l: number; c: number; v: number }[] = [];
   let p = basePrice * (0.5 + r() * 0.3);
   const now = Date.now();
   for (let i = days; i > 0; i--) {
+    const o = p;
     p *= 1 + (r() - 0.48) * 0.018;
-    bars.push({ t: now - i * 86400000, c: +p.toFixed(2) });
+    const c = +p.toFixed(2);
+    bars.push({ t: now - i * 86400000, o, h: Math.max(o, c), l: Math.min(o, c), c, v: 0 });
   }
   return bars;
 }
