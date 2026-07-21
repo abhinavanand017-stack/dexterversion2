@@ -9,6 +9,8 @@ import { INDICES_UNIVERSE } from "@/lib/forecast/indices";
 import { ETFS_UNIVERSE, type ETFRow } from "@/lib/forecast/etfs";
 import { FUNDS_UNIVERSE, type FundRow } from "@/lib/forecast/funds";
 import { runLongTermForecast, LONG_HORIZONS, cagrSourceLabel, type LongHorizon, type LongTermResult } from "@/lib/forecast/longterm";
+import { DataFreshnessBadge } from "@/components/DataFreshnessBadge";
+import { forecastStock, type CompositeForecast } from "@/lib/dataProvider/forecast";
 
 export const Route = createFileRoute("/forecast")({
   head: () => ({ meta: [
@@ -147,6 +149,7 @@ function ForecastWorkbench() {
               <div className="text-xs uppercase tracking-wider" style={{ color: GOLD, letterSpacing: 2 }}>Forecast Workbench</div>
               <h1 className="text-2xl md:text-3xl font-semibold mt-1">Stocks · Indices · ETFs · Funds</h1>
               <p className="text-sm mt-1" style={{ color: TEXT_DIM }}>35-model short-term signals · Monte Carlo long-term projections · Screener · Watchlist · Compare</p>
+              <div className="mt-2"><DataFreshnessBadge /></div>
             </div>
             <div className="flex gap-2 flex-wrap">
               <button onClick={() => setScreenerOpen(true)} className="px-3 py-2 text-sm rounded flex items-center gap-2" style={{ background: "#0d1728", border: `1px solid ${BORDER}`, color: "#cbd5e1" }}><Filter size={14} /> Screener</button>
@@ -219,6 +222,9 @@ function ForecastWorkbench() {
         {watchlist.length > 0 && (
           <WatchlistStrip ids={watchlist} onOpen={(id) => setPrefs((p) => ({ ...p, assetId: id, assetType: (id.split(":")[0] as AssetType) }))} onRemove={toggleWatch} />
         )}
+
+        {/* Bootstrap composite (static dataset, no cloud) */}
+        {prefs.assetType === "stock" && <BootstrapSignalCard symbol={asset.symbol.replace(/\.(NS|BO)$/i, "")} horizonDays={prefs.horizonShort === "1d" ? 1 : prefs.horizonShort === "5d" ? 5 : 20} />}
 
         {/* Body */}
         {prefs.term === "short" && !isFund && (
