@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { Eye, EyeOff, CheckCircle2, XCircle, ChevronDown } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Eye, EyeOff, CheckCircle2, XCircle, ChevronDown, Upload, RotateCcw, Database, Radio } from "lucide-react";
+import { getDataMode, setDataMode, getStore, setOverride, resetOverride, parseCsv } from "@/lib/dataProvider";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Dexter — Settings" }] }),
@@ -111,6 +112,8 @@ function SettingsPage() {
         )}
       </div>
 
+      <ForecasterDataPanel />
+
       <div className="dx-glass p-6">
         <h2 className="font-display text-xl mb-2">Modules</h2>
         <div className="grid sm:grid-cols-2 gap-2">
@@ -119,6 +122,91 @@ function SettingsPage() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============ Forecaster data source & manual refresh ============
+function ForecasterDataPanel() {
+  const [mode, setMode] = useState<"static" | "live">("static");
+  const [endpoint, setEndpoint] = useState("");
+  const [asOf, setAsOf] = useState("");
+  const [source, setSource] = useState<"bundled" | "user-upload">("bundled");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const stockRef = useRef<HTMLInputElement>(null);
+  const fundRef = useRef<HTMLInputElement>(null);
+  const etfRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setMode(getDataMode());
+    setEndpoint(localStorage.getItem("dx_live_data_endpoint") || "");
+    const s = getStore();
+    setAsOf(s.asOf); setSource(s.source);
+  }, []);
+
+  const flipMode = (m: "static" | "live") => { setDataMode(m); setMode(m); setMsg({ ok: true, text: `Data mode set to ${m}. Reload to apply everywhere.` }); };
+  const saveEndpoint = () => { localStorage.setItem("dx_live_data_endpoint", endpoint); setMsg({ ok: true, text: "Live endpoint saved." }); };
+
+  const upload = async (kind: "stocks" | "funds" | "etfs", file: File) => {
+    try {
+      const text = await file.text();
+      let rows: unknown[];
+      if (file.name.toLowerCase().endsWith(".json")) rows = JSON.parse(text);
+      else rows = parseCsv(text);
+      const s = setOverride(kind, rows, `${file.name} · ${new Date().toLocaleDateString()}`);
+      setAsOf(s.asOf); setSource(s.source);
+      setMsg({ ok: true, text: `${kind}: ${rows.length} rows loaded. Reload the Forecaster to see updates.` });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : "Parse failed" });
+    }
+  };
+
+  const reset = () => { const s = resetOverride(); setAsOf(s.asOf); setSource(s.source); setMsg({ ok: true, text: "Reverted to bundled dataset." }); };
+
+  return (
+    <div className="dx-glass p-6">
+      <h2 className="font-display text-xl mb-1">Forecaster Data Source</h2>
+      <p className="text-xs text-muted-foreground mb-4">Static bundle works offline with zero external API calls. Flip to Live when a data endpoint is configured.</p>
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        <button onClick={() => flipMode("static")} data-active={mode === "static"} className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground flex items-center gap-1.5"><Database className="w-3 h-3" /> Static</button>
+        <button onClick={() => flipMode("live")} data-active={mode === "live"} className="px-3 py-1.5 text-xs rounded border border-border data-[active=true]:bg-primary data-[active=true]:text-primary-foreground flex items-center gap-1.5"><Radio className="w-3 h-3" /> Live</button>
+        <div className="ml-auto text-xs text-muted-foreground self-center">Active dataset: <b>{asOf}</b> ({source})</div>
+      </div>
+
+      {mode === "live" && (
+        <div className="mb-4">
+          <label className="text-xs uppercase text-muted-foreground font-mono">Live data endpoint</label>
+          <div className="mt-1 flex gap-2">
+            <input value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="https://your-broker-proxy.example.com"
+              className="flex-1 px-3 py-2 rounded border border-border bg-background/40 text-sm font-mono outline-none" />
+            <button onClick={saveEndpoint} className="px-3 py-2 rounded bg-primary text-primary-foreground text-sm font-semibold">Save</button>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">Provider must expose <code>/quote?symbol=…</code> and <code>/historical?symbol=…&range=…</code>. Leave empty to fall back to static.</p>
+        </div>
+      )}
+
+      <div className="grid sm:grid-cols-3 gap-2 mb-3">
+        {([
+          { kind: "stocks" as const, label: "Stocks CSV/JSON", ref: stockRef },
+          { kind: "funds" as const, label: "Mutual funds CSV/JSON", ref: fundRef },
+          { kind: "etfs" as const, label: "ETFs CSV/JSON", ref: etfRef },
+        ]).map(({ kind, label, ref }) => (
+          <div key={kind}>
+            <button onClick={() => ref.current?.click()} className="w-full px-3 py-2 rounded border border-border text-sm flex items-center justify-center gap-2 hover:bg-primary/10"><Upload className="w-3 h-3" /> {label}</button>
+            <input ref={ref} type="file" accept=".csv,.json" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(kind, f); e.currentTarget.value = ""; }} />
+          </div>
+        ))}
+      </div>
+
+      <button onClick={reset} className="text-xs text-muted-foreground flex items-center gap-1.5 hover:text-foreground"><RotateCcw className="w-3 h-3" /> Revert to bundled dataset</button>
+
+      {msg && (
+        <div className="mt-3 text-sm flex items-center gap-2" style={{ color: msg.ok ? "#00ff88" : "#ff4466" }}>
+          {msg.ok ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />} {msg.text}
+        </div>
+      )}
+      <p className="mt-2 text-[11px] text-muted-foreground">Upload must match the bundled JSON schema (or the same headers as the Value Research / NSE exports). No automated scraping — Screener.in has no public API and their terms prohibit it.</p>
     </div>
   );
 }

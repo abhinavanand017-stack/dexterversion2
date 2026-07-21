@@ -9,6 +9,8 @@ import { INDICES_UNIVERSE } from "@/lib/forecast/indices";
 import { ETFS_UNIVERSE, type ETFRow } from "@/lib/forecast/etfs";
 import { FUNDS_UNIVERSE, type FundRow } from "@/lib/forecast/funds";
 import { runLongTermForecast, LONG_HORIZONS, cagrSourceLabel, type LongHorizon, type LongTermResult } from "@/lib/forecast/longterm";
+import { DataFreshnessBadge } from "@/components/DataFreshnessBadge";
+import { forecastStock, type CompositeForecast } from "@/lib/dataProvider/forecast";
 
 export const Route = createFileRoute("/forecast")({
   head: () => ({ meta: [
@@ -147,6 +149,7 @@ function ForecastWorkbench() {
               <div className="text-xs uppercase tracking-wider" style={{ color: GOLD, letterSpacing: 2 }}>Forecast Workbench</div>
               <h1 className="text-2xl md:text-3xl font-semibold mt-1">Stocks · Indices · ETFs · Funds</h1>
               <p className="text-sm mt-1" style={{ color: TEXT_DIM }}>35-model short-term signals · Monte Carlo long-term projections · Screener · Watchlist · Compare</p>
+              <div className="mt-2"><DataFreshnessBadge /></div>
             </div>
             <div className="flex gap-2 flex-wrap">
               <button onClick={() => setScreenerOpen(true)} className="px-3 py-2 text-sm rounded flex items-center gap-2" style={{ background: "#0d1728", border: `1px solid ${BORDER}`, color: "#cbd5e1" }}><Filter size={14} /> Screener</button>
@@ -219,6 +222,9 @@ function ForecastWorkbench() {
         {watchlist.length > 0 && (
           <WatchlistStrip ids={watchlist} onOpen={(id) => setPrefs((p) => ({ ...p, assetId: id, assetType: (id.split(":")[0] as AssetType) }))} onRemove={toggleWatch} />
         )}
+
+        {/* Bootstrap composite (static dataset, no cloud) */}
+        {prefs.assetType === "stock" && <BootstrapSignalCard symbol={asset.symbol.replace(/\.(NS|BO)$/i, "")} horizonDays={prefs.horizonShort === "1d" ? 1 : prefs.horizonShort === "5d" ? 5 : 20} />}
 
         {/* Body */}
         {prefs.term === "short" && !isFund && (
@@ -844,6 +850,56 @@ function SkeletonBlock() {
       <div className="text-center text-sm flex items-center justify-center gap-2" style={{ color: TEXT_DIM }}>
         <Loader2 size={14} className="animate-spin" /> Running 35-model panel
       </div>
+    </div>
+  );
+}
+
+// ============ BootstrapSignalCard — static-data composite forecast ============
+function BootstrapSignalCard({ symbol, horizonDays }: { symbol: string; horizonDays: number }) {
+  const f: CompositeForecast = useMemo(() => forecastStock(symbol, horizonDays), [symbol, horizonDays]);
+  if (!f.price) return null;
+  const sigColor = f.signal === "BUY" ? GREEN : f.signal === "SELL" ? RED : AMBER;
+  return (
+    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4 md:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-wider" style={{ color: GOLD, letterSpacing: 2 }}>Bootstrap Signal · static dataset</div>
+          <h3 className="text-lg font-semibold mt-1">{symbol} · {horizonDays}D composite</h3>
+          <div className="text-xs mt-1" style={{ color: TEXT_DIM }}>Weighted blend of momentum, category relative strength, and 52W band mean-reversion.</div>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold" style={{ color: sigColor }}>{f.signal}</div>
+          <div className="text-xs" style={{ color: TEXT_DIM }}>confidence {f.confidencePct}%</div>
+        </div>
+      </div>
+      <div className="grid md:grid-cols-3 gap-3 mt-4">
+        <Stat label="Last price" value={`₹${f.price?.toFixed(2)}`} />
+        <Stat label={`Target (${horizonDays}D)`} value={f.targetPrice ? `₹${f.targetPrice.toFixed(2)}` : "—"} />
+        <Stat label="Score (−1 … +1)" value={f.score.toFixed(2)} accent={sigColor} />
+      </div>
+      <div className="grid md:grid-cols-3 gap-3 mt-3">
+        {f.breakdown.map((b) => (
+          <div key={b.label} className="rounded p-3" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
+            <div className="flex justify-between text-xs" style={{ color: TEXT_DIM }}><span>{b.label}</span><span>weight {(b.weight * 100).toFixed(0)}%</span></div>
+            <div className="mt-1 font-mono text-sm" style={{ color: b.score >= 0 ? GREEN : RED }}>{b.score >= 0 ? "+" : ""}{b.score.toFixed(2)}</div>
+            <div className="mt-1 text-xs" style={{ color: TEXT_DIM }}>{b.detail}</div>
+          </div>
+        ))}
+      </div>
+      {f.notes.length > 0 && (
+        <div className="mt-3 text-xs flex items-start gap-2 p-2 rounded" style={{ background: "#0d1728", color: TEXT_DIM, border: `1px dashed ${BORDER}` }}>
+          <AlertTriangle size={12} className="mt-0.5" style={{ color: AMBER }} />
+          <div>{f.notes.join(" ")}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  return (
+    <div className="rounded p-3" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
+      <div className="text-xs" style={{ color: TEXT_DIM }}>{label}</div>
+      <div className="text-lg font-semibold mt-0.5" style={{ color: accent ?? "#e6ecf5" }}>{value}</div>
     </div>
   );
 }
