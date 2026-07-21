@@ -853,3 +853,53 @@ function SkeletonBlock() {
     </div>
   );
 }
+
+// ============ BootstrapSignalCard — static-data composite forecast ============
+function BootstrapSignalCard({ symbol, horizonDays }: { symbol: string; horizonDays: number }) {
+  const f: CompositeForecast = useMemo(() => forecastStock(symbol, horizonDays), [symbol, horizonDays]);
+  if (!f.price) return null;
+  const sigColor = f.signal === "BUY" ? GREEN : f.signal === "SELL" ? RED : AMBER;
+  return (
+    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4 md:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase tracking-wider" style={{ color: GOLD, letterSpacing: 2 }}>Bootstrap Signal · static dataset</div>
+          <h3 className="text-lg font-semibold mt-1">{symbol} · {horizonDays}D composite</h3>
+          <div className="text-xs mt-1" style={{ color: TEXT_DIM }}>Weighted blend of momentum, category relative strength, and 52W band mean-reversion.</div>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold" style={{ color: sigColor }}>{f.signal}</div>
+          <div className="text-xs" style={{ color: TEXT_DIM }}>confidence {f.confidencePct}%</div>
+        </div>
+      </div>
+      <div className="grid md:grid-cols-3 gap-3 mt-4">
+        <Stat label="Last price" value={`₹${f.price?.toFixed(2)}`} />
+        <Stat label={`Target (${horizonDays}D)`} value={f.targetPrice ? `₹${f.targetPrice.toFixed(2)}` : "—"} />
+        <Stat label="Score (−1 … +1)" value={f.score.toFixed(2)} accent={sigColor} />
+      </div>
+      <div className="grid md:grid-cols-3 gap-3 mt-3">
+        {f.breakdown.map((b) => (
+          <div key={b.label} className="rounded p-3" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
+            <div className="flex justify-between text-xs" style={{ color: TEXT_DIM }}><span>{b.label}</span><span>weight {(b.weight * 100).toFixed(0)}%</span></div>
+            <div className="mt-1 font-mono text-sm" style={{ color: b.score >= 0 ? GREEN : RED }}>{b.score >= 0 ? "+" : ""}{b.score.toFixed(2)}</div>
+            <div className="mt-1 text-xs" style={{ color: TEXT_DIM }}>{b.detail}</div>
+          </div>
+        ))}
+      </div>
+      {f.notes.length > 0 && (
+        <div className="mt-3 text-xs flex items-start gap-2 p-2 rounded" style={{ background: "#0d1728", color: TEXT_DIM, border: `1px dashed ${BORDER}` }}>
+          <AlertTriangle size={12} className="mt-0.5" style={{ color: AMBER }} />
+          <div>{f.notes.join(" ")}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  return (
+    <div className="rounded p-3" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
+      <div className="text-xs" style={{ color: TEXT_DIM }}>{label}</div>
+      <div className="text-lg font-semibold mt-0.5" style={{ color: accent ?? "#e6ecf5" }}>{value}</div>
+    </div>
+  );
+}
