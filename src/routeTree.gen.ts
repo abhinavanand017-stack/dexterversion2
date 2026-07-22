@@ -36,6 +36,7 @@ import { Route as BiometricsRouteImport } from './routes/biometrics'
 import { Route as BacktesterRouteImport } from './routes/backtester'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiForecastRouteImport } from './routes/api/forecast'
+import { Route as ApiPublicSyncQuotesRouteImport } from './routes/api/public/sync-quotes'
 
 const WatchlistRoute = WatchlistRouteImport.update({
   id: '/watchlist',
@@ -172,6 +173,11 @@ const ApiForecastRoute = ApiForecastRouteImport.update({
   path: '/api/forecast',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSyncQuotesRoute = ApiPublicSyncQuotesRouteImport.update({
+  id: '/api/public/sync-quotes',
+  path: '/api/public/sync-quotes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -201,6 +207,7 @@ export interface FileRoutesByFullPath {
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
   '/api/forecast': typeof ApiForecastRoute
+  '/api/public/sync-quotes': typeof ApiPublicSyncQuotesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -230,6 +237,7 @@ export interface FileRoutesByTo {
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
   '/api/forecast': typeof ApiForecastRoute
+  '/api/public/sync-quotes': typeof ApiPublicSyncQuotesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -260,6 +268,7 @@ export interface FileRoutesById {
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
   '/api/forecast': typeof ApiForecastRoute
+  '/api/public/sync-quotes': typeof ApiPublicSyncQuotesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -291,6 +300,7 @@ export interface FileRouteTypes {
     | '/tax'
     | '/watchlist'
     | '/api/forecast'
+    | '/api/public/sync-quotes'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -320,6 +330,7 @@ export interface FileRouteTypes {
     | '/tax'
     | '/watchlist'
     | '/api/forecast'
+    | '/api/public/sync-quotes'
   id:
     | '__root__'
     | '/'
@@ -349,6 +360,7 @@ export interface FileRouteTypes {
     | '/tax'
     | '/watchlist'
     | '/api/forecast'
+    | '/api/public/sync-quotes'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -379,6 +391,7 @@ export interface RootRouteChildren {
   TaxRoute: typeof TaxRoute
   WatchlistRoute: typeof WatchlistRoute
   ApiForecastRoute: typeof ApiForecastRoute
+  ApiPublicSyncQuotesRoute: typeof ApiPublicSyncQuotesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -572,6 +585,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiForecastRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/sync-quotes': {
+      id: '/api/public/sync-quotes'
+      path: '/api/public/sync-quotes'
+      fullPath: '/api/public/sync-quotes'
+      preLoaderRoute: typeof ApiPublicSyncQuotesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -603,17 +623,8 @@ const rootRouteChildren: RootRouteChildren = {
   TaxRoute: TaxRoute,
   WatchlistRoute: WatchlistRoute,
   ApiForecastRoute: ApiForecastRoute,
+  ApiPublicSyncQuotesRoute: ApiPublicSyncQuotesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
