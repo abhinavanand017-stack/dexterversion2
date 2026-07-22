@@ -11,7 +11,7 @@ export function getDataMode(): DataMode {
     const v = localStorage.getItem(LS_MODE);
     if (v === "live" || v === "static") return v;
   }
-  return "static";
+  return "live";
 }
 export function setDataMode(mode: DataMode) {
   if (typeof localStorage !== "undefined") localStorage.setItem(LS_MODE, mode);
@@ -27,3 +27,5 @@ export function getDataProvider(): DataProvider {
 
 export * from "./types";
 export { getStore, setOverride, resetOverride, parseCsv } from "./store";
+export { getSymbolStatus, getLiveAsOf, ensureLiveBootstrap } from "./liveProvider";
+export type { SymbolStatus } from "./liveProvider";
