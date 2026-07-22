@@ -14,7 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      live_quotes: {
+        Row: {
+          day_change: number | null
+          day_change_pct: number | null
+          ltp: number | null
+          symbol: string
+          updated_at: string
+          volume: number | null
+        }
+        Insert: {
+          day_change?: number | null
+          day_change_pct?: number | null
+          ltp?: number | null
+          symbol: string
+          updated_at?: string
+          volume?: number | null
+        }
+        Update: {
+          day_change?: number | null
+          day_change_pct?: number | null
+          ltp?: number | null
+          symbol?: string
+          updated_at?: string
+          volume?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
