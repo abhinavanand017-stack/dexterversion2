@@ -301,7 +301,7 @@ export const fetchYahooChart = createServerFn({ method: "GET" })
     range: input.range || "2y",
     interval: input.interval || "1d",
   }))
-  .handler(async ({ data }): Promise<{ ok: boolean; bars: YahooBar[]; currency?: string; longName?: string; price?: number; error?: string }> => {
+  .handler(async ({ data }): Promise<{ ok: boolean; bars: YahooBar[]; currency?: string; longName?: string; price?: number; prevClose?: number; dayHigh?: number; dayLow?: number; dayOpen?: number; volume?: number; w52High?: number; w52Low?: number; error?: string }> => {
     try {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(data.symbol)}?interval=${data.interval}&range=${data.range}`;
       const res = await withTimeout(fetch(url, { headers: BROWSER_HEADERS }), 6000);
@@ -309,7 +309,7 @@ export const fetchYahooChart = createServerFn({ method: "GET" })
       const json = await res.json() as {
         chart?: {
           result?: Array<{
-            meta?: { regularMarketPrice?: number; currency?: string; longName?: string; symbol?: string };
+            meta?: { regularMarketPrice?: number; previousClose?: number; chartPreviousClose?: number; regularMarketDayHigh?: number; regularMarketDayLow?: number; regularMarketVolume?: number; fiftyTwoWeekHigh?: number; fiftyTwoWeekLow?: number; currency?: string; longName?: string; symbol?: string };
             timestamp?: number[];
             indicators?: { quote?: Array<{ open: (number | null)[]; high: (number | null)[]; low: (number | null)[]; close: (number | null)[]; volume: (number | null)[] }> };
           }>;
@@ -327,14 +327,24 @@ export const fetchYahooChart = createServerFn({ method: "GET" })
         if (o == null || h == null || l == null || c == null) continue;
         bars.push({ t: ts[i] * 1000, o, h, l, c, v: v ?? 0 });
       }
+      const m = r?.meta;
+      const last = bars[bars.length - 1];
       return {
         ok: bars.length > 0,
         bars,
-        currency: r?.meta?.currency,
-        longName: r?.meta?.longName,
-        price: r?.meta?.regularMarketPrice,
+        currency: m?.currency,
+        longName: m?.longName,
+        price: m?.regularMarketPrice ?? last?.c,
+        prevClose: m?.previousClose ?? m?.chartPreviousClose ?? (bars.length >= 2 ? bars[bars.length - 2].c : undefined),
+        dayHigh: m?.regularMarketDayHigh ?? last?.h,
+        dayLow: m?.regularMarketDayLow ?? last?.l,
+        dayOpen: last?.o,
+        volume: m?.regularMarketVolume ?? last?.v,
+        w52High: m?.fiftyTwoWeekHigh,
+        w52Low: m?.fiftyTwoWeekLow,
       };
     } catch (e) {
       return { ok: false, bars: [], error: e instanceof Error ? e.message : "unknown" };
     }
   });
+
