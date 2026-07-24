@@ -1,905 +1,781 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { Search, Loader2, AlertTriangle, TrendingUp, TrendingDown, Minus, ChevronDown, ChevronRight, Star, StarOff, GitCompare, Download, Filter, X, Calculator } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart, ReferenceLine } from "recharts";
-import { MODEL_REGISTRY, FAMILY_LABEL, fetchForecast, generateMockForecast, type Family, type Horizon, type ForecastResponse, type ModelForecast } from "@/lib/forecast/workbench";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Search, Loader2, TrendingUp, TrendingDown, X, Star, StarOff, GitCompare, Sparkles, RefreshCw } from "lucide-react";
+import {
+  ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
+  LineChart,
+} from "recharts";
+import { fetchYahooChart } from "@/lib/yahoo.functions";
+import { generateDexterInsight } from "@/lib/forecast/insight.functions";
+import { runShortTermForecast, barsToOHLCV, HORIZON_DAYS, type Horizon, type EngineResult } from "@/lib/forecast/engine12";
 import { NIFTY500 } from "@/lib/nifty500";
 import { INDICES_UNIVERSE } from "@/lib/forecast/indices";
-import { ETFS_UNIVERSE, type ETFRow } from "@/lib/forecast/etfs";
-import { FUNDS_UNIVERSE, type FundRow } from "@/lib/forecast/funds";
-import { runLongTermForecast, LONG_HORIZONS, cagrSourceLabel, type LongHorizon, type LongTermResult } from "@/lib/forecast/longterm";
-import { DataFreshnessBadge } from "@/components/DataFreshnessBadge";
-import { forecastStock, type CompositeForecast } from "@/lib/dataProvider/forecast";
+import { ETFS_UNIVERSE } from "@/lib/forecast/etfs";
+import { FUNDS_UNIVERSE } from "@/lib/forecast/funds";
 
 export const Route = createFileRoute("/forecast")({
-  head: () => ({ meta: [
-    { title: "Forecast Workbench — Dexter" },
-    { name: "description", content: "Multi-model forecasting for Indian stocks, indices, ETFs and mutual funds. Short-term signals and long-term Monte Carlo projections." },
-  ] }),
-  component: ForecastWorkbench,
+  head: () => ({
+    meta: [
+      { title: "Forecast — Live 12-Factor Analysis · Dexter" },
+      { name: "description", content: "Live NSE/BSE forecasts using a 12-factor technical engine, real-time Yahoo data, and Dexter AI commentary." },
+      { property: "og:title", content: "Dexter Forecast — Live 12-Factor Analysis" },
+      { property: "og:description", content: "Live prices, 12 weighted technical factors, price targets and Dexter AI insight for Indian stocks, indices and ETFs." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
+  component: ForecastPage,
 });
 
-// --- design tokens ---
-const GOLD = "#D4AF37";
-const NAVY_BG = "#0B1220";
-const CARD_BG = "#111C33";
-const BORDER = "#1e2a44";
-const TEXT_DIM = "#8b9bb4";
+// ── design tokens ──
+const BG = "#0a0a1a";
+const CARD = "rgba(255,255,255,0.03)";
+const BORDER = "rgba(255,255,255,0.08)";
+const BLUE = "#378ADD";
 const GREEN = "#22c55e";
 const RED = "#ef4444";
 const AMBER = "#f59e0b";
-const BLUE = "#60a5fa";
+const TEXT = "#f1f5f9";
+const MUTED = "#94a3b8";
+const HORIZONS: Horizon[] = ["1D", "5D", "1M", "3M", "6M", "1Y", "3Y", "5Y"];
 
-// --- types ---
-type AssetType = "stock" | "index" | "etf" | "fund";
-type Term = "short" | "long";
-interface Asset { id: string; symbol: string; name: string; type: AssetType; meta?: string }
+// ── universe ──
+type AssetKind = "stock" | "index" | "etf" | "fund";
+interface Asset { key: string; symbol: string; name: string; kind: AssetKind; meta?: string; yahoo?: string; fundReturns?: { r1?: number | null; r3?: number | null; r5?: number | null; r10?: number | null; nav?: number | null } }
 
-const ASSET_LABEL: Record<AssetType, string> = { stock: "Stocks", index: "Indices", etf: "ETFs", fund: "Mutual Funds" };
-const SHORT_HORIZONS: { id: Horizon; label: string }[] = [
-  { id: "1d", label: "1D" }, { id: "5d", label: "5D" }, { id: "20d", label: "1M" },
+const UNIVERSE: Asset[] = [
+  ...NIFTY500.map((s): Asset => ({ key: `stock:${s.symbol}`, symbol: `${s.symbol}.NS`, name: s.name, kind: "stock", meta: s.sector, yahoo: `${s.symbol}.NS` })),
+  ...INDICES_UNIVERSE.map((i): Asset => ({ key: `index:${i.symbol}`, symbol: i.symbol, name: i.name, kind: "index", meta: i.cat, yahoo: i.symbol })),
+  ...ETFS_UNIVERSE.map((e): Asset => ({ key: `etf:${e.name}`, symbol: e.name, name: e.name, kind: "etf", meta: e.cat, fundReturns: { r1: e.r1, r3: e.r3, r5: e.r5, nav: e.nav } })),
+  ...FUNDS_UNIVERSE.map((f): Asset => ({ key: `fund:${f.name}`, symbol: f.name, name: f.name, kind: "fund", meta: f.cat, fundReturns: { r1: f.r1, r3: f.r3, r5: f.r5, r10: f.r10, nav: f.nav ?? null } })),
 ];
-const FAMILIES: Family[] = ["deep_learning", "ensemble_hybrid", "machine_learning", "statistical", "advanced_niche", "next_gen"];
-const LS_PREFS = "dx_forecast_v2_prefs";
-const LS_WATCH = "dx_forecast_v2_watchlist";
 
-interface Prefs { assetType: AssetType; assetId: string; term: Term; horizonShort: Horizon; horizonLong: LongHorizon; models: string[] }
-function loadPrefs(): Prefs {
-  const def: Prefs = { assetType: "stock", assetId: "RELIANCE", term: "short", horizonShort: "5d", horizonLong: "1y", models: MODEL_REGISTRY.map((m) => m.name) };
-  try {
-    const raw = typeof window !== "undefined" ? localStorage.getItem(LS_PREFS) : null;
-    if (!raw) return def;
-    const p = JSON.parse(raw) as Partial<Prefs>;
-    return { ...def, ...p, models: Array.isArray(p.models) && p.models.length ? p.models : def.models };
-  } catch { return def; }
-}
-function loadWatch(): string[] { try { const r = typeof window !== "undefined" ? localStorage.getItem(LS_WATCH) : null; return r ? JSON.parse(r) : []; } catch { return []; } }
+const POPULAR = ["stock:RELIANCE", "stock:TCS", "stock:HDFCBANK", "stock:INFY", "stock:BHARTIARTL", "stock:SBIN", "stock:BAJFINANCE", "index:^NSEI"];
+const LS_WATCH = "dx_fc_watch_v3";
+const LS_HIST = (sym: string) => `dexter_hist_${sym}`;
+const HIST_TTL_MS = 4 * 60 * 60 * 1000;
 
-// --- universe lookups ---
-function stockAssets(): Asset[] {
-  return NIFTY500.map((s) => ({ id: `stock:${s.symbol}`, symbol: `${s.symbol}.NS`, name: s.name, type: "stock", meta: s.sector }));
+// ── helpers ──
+function fmtINR(n: number | null | undefined, digits = 2): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  return "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
-function indexAssets(): Asset[] { return INDICES_UNIVERSE.map((i) => ({ id: `index:${i.symbol}`, symbol: i.symbol, name: i.name, type: "index", meta: i.cat })); }
-function etfAssets(): Asset[] { return ETFS_UNIVERSE.map((e) => ({ id: `etf:${e.name}`, symbol: e.name, name: e.name, type: "etf", meta: e.cat })); }
-function fundAssets(): Asset[] { return FUNDS_UNIVERSE.map((f) => ({ id: `fund:${f.name}`, symbol: f.name, name: f.name, type: "fund", meta: f.cat })); }
-function universeFor(t: AssetType): Asset[] {
-  return t === "stock" ? stockAssets() : t === "index" ? indexAssets() : t === "etf" ? etfAssets() : fundAssets();
+function fmtPct(n: number | null | undefined, digits = 2): string {
+  if (n == null || !Number.isFinite(n)) return "—";
+  const s = n >= 0 ? "+" : "";
+  return `${s}${n.toFixed(digits)}%`;
 }
-function assetById(id: string): Asset | null {
-  const [type] = id.split(":") as [AssetType];
-  return universeFor(type).find((a) => a.id === id) ?? null;
+function fmtVol(n: number | null | undefined): string {
+  if (n == null) return "—";
+  if (n >= 1e7) return (n / 1e7).toFixed(2) + " Cr";
+  if (n >= 1e5) return (n / 1e5).toFixed(2) + " L";
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+  return n.toString();
 }
-function findEtf(name: string): ETFRow | undefined { return ETFS_UNIVERSE.find((e) => e.name === name); }
-function findFund(name: string): FundRow | undefined { return FUNDS_UNIVERSE.find((f) => f.name === name); }
+function signalColor(sig: string): string {
+  if (sig.includes("STRONG BUY")) return GREEN;
+  if (sig === "BUY") return GREEN;
+  if (sig === "SELL") return RED;
+  if (sig.includes("STRONG SELL")) return RED;
+  return AMBER;
+}
 
-// --- deterministic bar synth for long-term when we have no live series ---
-function hash(s: string) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
-function rnd(seed: number) { return () => { seed |= 0; seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
-function synthBars(seed: string, basePrice: number, days = 1500) {
-  const r = rnd(hash(seed));
-  const bars: { t: number; o: number; h: number; l: number; c: number; v: number }[] = [];
-  let p = basePrice * (0.5 + r() * 0.3);
-  const now = Date.now();
-  for (let i = days; i > 0; i--) {
-    const o = p;
-    p *= 1 + (r() - 0.48) * 0.018;
-    const c = +p.toFixed(2);
-    bars.push({ t: now - i * 86400000, o, h: Math.max(o, c), l: Math.min(o, c), c, v: 0 });
+// ── Yahoo cache with sessionStorage ──
+interface CachedHist { ts: number; bars: { t: number; o: number; h: number; l: number; c: number; v: number }[]; meta: YahooMeta }
+interface YahooMeta { price?: number; prevClose?: number; dayHigh?: number; dayLow?: number; dayOpen?: number; volume?: number; w52High?: number; w52Low?: number; longName?: string; currency?: string }
+
+async function loadYahoo(symbol: string, force = false): Promise<{ bars: CachedHist["bars"]; meta: YahooMeta; cached: boolean } | null> {
+  const key = LS_HIST(symbol);
+  if (!force && typeof sessionStorage !== "undefined") {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (raw) {
+        const c = JSON.parse(raw) as CachedHist;
+        if (Date.now() - c.ts < HIST_TTL_MS) return { bars: c.bars, meta: c.meta, cached: true };
+      }
+    } catch { /* ignore */ }
   }
-  return bars;
+  const r = await fetchYahooChart({ data: { symbol, range: "1y", interval: "1d" } });
+  if (!r.ok || !r.bars.length) return null;
+  const meta: YahooMeta = { price: r.price, prevClose: r.prevClose, dayHigh: r.dayHigh, dayLow: r.dayLow, dayOpen: r.dayOpen, volume: r.volume, w52High: r.w52High, w52Low: r.w52Low, longName: r.longName, currency: r.currency };
+  try { sessionStorage.setItem(key, JSON.stringify({ ts: Date.now(), bars: r.bars, meta } satisfies CachedHist)); } catch { /* ignore */ }
+  return { bars: r.bars, meta, cached: false };
 }
 
-// ============ ROOT ============
-function ForecastWorkbench() {
-  const [prefs, setPrefs] = useState<Prefs>(() => loadPrefs());
-  const [watchlist, setWatchlist] = useState<string[]>(() => loadWatch());
-  const [compare, setCompare] = useState<string[]>([]);
-  const [screenerOpen, setScreenerOpen] = useState(false);
-
-  useEffect(() => { try { localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); } catch { /* ignore */ } }, [prefs]);
-  useEffect(() => { try { localStorage.setItem(LS_WATCH, JSON.stringify(watchlist)); } catch { /* ignore */ } }, [watchlist]);
-
-  const asset = assetById(prefs.assetId) ?? universeFor(prefs.assetType)[0];
-  const isFund = asset.type === "fund";
-
-  // short-term uses the workbench API; not applicable to funds (no daily price series)
-  const shortMutation = useMutation({
-    mutationFn: (req: { ticker: string; horizon: Horizon; models: string[] }) => fetchForecast(req),
-  });
-
-  // long-term is computed client-side deterministically
-  const longResult = useMemo<LongTermResult | null>(() => {
-    if (prefs.term !== "long") return null;
-    const fund = isFund ? findFund(asset.name) : undefined;
-    const etf = asset.type === "etf" ? findEtf(asset.name) : undefined;
-    const base = fund ? 100 : etf?.nav ?? 500 + (hash(asset.id) % 2000);
-    const bars = synthBars(asset.id, base);
-    return runLongTermForecast({
-      bars,
-      horizon: prefs.horizonLong,
-      confidence: 80,
-      mcPaths: 1500,
-      fundCagr: fund ? { r1: fund.r1, r3: fund.r3, r5: fund.r5, r10: fund.r10 } : undefined,
-    });
-  }, [prefs.term, prefs.horizonLong, asset, isFund]);
-
-  const runShort = () => {
-    if (isFund) return;
-    shortMutation.mutate({ ticker: asset.symbol, horizon: prefs.horizonShort, models: prefs.models });
-  };
-
-  useEffect(() => { if (prefs.term === "short" && !isFund) runShort(); /* eslint-disable-next-line */ }, [prefs.assetId, prefs.horizonShort, prefs.term]);
-
-  const toggleWatch = (id: string) => setWatchlist((w) => w.includes(id) ? w.filter((x) => x !== id) : [...w, id]);
-  const toggleCompare = (id: string) => setCompare((c) => c.includes(id) ? c.filter((x) => x !== id) : c.length >= 3 ? c : [...c, id]);
-
-  const setAssetType = (t: AssetType) => {
-    const u = universeFor(t);
-    setPrefs((p) => ({ ...p, assetType: t, assetId: u[0]?.id ?? p.assetId, term: t === "fund" ? "long" : p.term }));
-  };
-
-  return (
-    <div style={{ background: NAVY_BG, minHeight: "100vh", color: "#e6ecf5" }} className="tabular-nums">
-      <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-6 space-y-5">
-        {/* Header */}
-        <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4 md:p-5">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex-1 min-w-[220px]">
-              <div className="text-xs uppercase tracking-wider" style={{ color: GOLD, letterSpacing: 2 }}>Forecast Workbench</div>
-              <h1 className="text-2xl md:text-3xl font-semibold mt-1">Stocks · Indices · ETFs · Funds</h1>
-              <p className="text-sm mt-1" style={{ color: TEXT_DIM }}>35-model short-term signals · Monte Carlo long-term projections · Screener · Watchlist · Compare</p>
-              <div className="mt-2"><DataFreshnessBadge /></div>
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <button onClick={() => setScreenerOpen(true)} className="px-3 py-2 text-sm rounded flex items-center gap-2" style={{ background: "#0d1728", border: `1px solid ${BORDER}`, color: "#cbd5e1" }}><Filter size={14} /> Screener</button>
-              <button onClick={() => toggleWatch(asset.id)} className="px-3 py-2 text-sm rounded flex items-center gap-2" style={{ background: "#0d1728", border: `1px solid ${BORDER}`, color: watchlist.includes(asset.id) ? GOLD : "#cbd5e1" }}>
-                {watchlist.includes(asset.id) ? <Star size={14} fill={GOLD} /> : <StarOff size={14} />}
-                Watchlist ({watchlist.length})
-              </button>
-              <button onClick={() => toggleCompare(asset.id)} className="px-3 py-2 text-sm rounded flex items-center gap-2" style={{ background: compare.includes(asset.id) ? GOLD : "#0d1728", border: `1px solid ${BORDER}`, color: compare.includes(asset.id) ? NAVY_BG : "#cbd5e1" }}>
-                <GitCompare size={14} /> Compare ({compare.length}/3)
-              </button>
-            </div>
-          </div>
-
-          {/* Asset type tabs */}
-          <div className="mt-4 flex gap-1 border-b" style={{ borderColor: BORDER }}>
-            {(Object.keys(ASSET_LABEL) as AssetType[]).map((t) => {
-              const on = prefs.assetType === t;
-              return (
-                <button key={t} onClick={() => setAssetType(t)} className="px-4 py-2 text-sm transition"
-                  style={{ color: on ? GOLD : TEXT_DIM, borderBottom: `2px solid ${on ? GOLD : "transparent"}`, fontWeight: on ? 600 : 500 }}>
-                  {ASSET_LABEL[t]} <span className="text-xs opacity-70">({universeFor(t).length})</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Asset picker + horizon/term */}
-          <div className="mt-4 flex flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-[260px]"><AssetPicker assetType={prefs.assetType} value={prefs.assetId} onChange={(id) => setPrefs((p) => ({ ...p, assetId: id }))} /></div>
-            {!isFund && (
-              <div className="flex items-center gap-1 rounded-md p-1" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-                {(["short", "long"] as Term[]).map((t) => {
-                  const on = prefs.term === t;
-                  return <button key={t} onClick={() => setPrefs((p) => ({ ...p, term: t }))} className="px-3 py-1.5 text-xs rounded transition"
-                    style={{ background: on ? GOLD : "transparent", color: on ? NAVY_BG : "#cbd5e1", fontWeight: on ? 600 : 500 }}>{t === "short" ? "Short-Term" : "Long-Term"}</button>;
-                })}
-              </div>
-            )}
-            {(prefs.term === "short" && !isFund) ? (
-              <div className="flex items-center gap-1 rounded-md p-1" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-                {SHORT_HORIZONS.map((h) => {
-                  const on = prefs.horizonShort === h.id;
-                  return <button key={h.id} onClick={() => setPrefs((p) => ({ ...p, horizonShort: h.id }))} className="px-3 py-1.5 text-xs rounded"
-                    style={{ background: on ? GOLD : "transparent", color: on ? NAVY_BG : "#cbd5e1", fontWeight: on ? 600 : 500 }}>{h.label}</button>;
-                })}
-              </div>
-            ) : (
-              <div className="flex items-center gap-1 rounded-md p-1" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-                {LONG_HORIZONS.map((h) => {
-                  const on = prefs.horizonLong === h.id;
-                  return <button key={h.id} onClick={() => setPrefs((p) => ({ ...p, horizonLong: h.id }))} className="px-3 py-1.5 text-xs rounded"
-                    style={{ background: on ? GOLD : "transparent", color: on ? NAVY_BG : "#cbd5e1", fontWeight: on ? 600 : 500 }}>{h.label}</button>;
-                })}
-              </div>
-            )}
-            {prefs.term === "short" && !isFund && (
-              <button onClick={runShort} disabled={shortMutation.isPending} className="px-4 py-2 rounded font-semibold text-sm flex items-center gap-2 transition disabled:opacity-50" style={{ background: GOLD, color: NAVY_BG }}>
-                {shortMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <TrendingUp size={14} />} Run
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Compare bar */}
-        {compare.length > 0 && (
-          <CompareBar ids={compare} term={prefs.term} horizonShort={prefs.horizonShort} horizonLong={prefs.horizonLong} models={prefs.models} onRemove={toggleCompare} onClear={() => setCompare([])} />
-        )}
-
-        {/* Watchlist row */}
-        {watchlist.length > 0 && (
-          <WatchlistStrip ids={watchlist} onOpen={(id) => setPrefs((p) => ({ ...p, assetId: id, assetType: (id.split(":")[0] as AssetType) }))} onRemove={toggleWatch} />
-        )}
-
-        {/* Bootstrap composite (static dataset, no cloud) */}
-        {prefs.assetType === "stock" && <BootstrapSignalCard symbol={asset.symbol.replace(/\.(NS|BO)$/i, "")} horizonDays={prefs.horizonShort === "1d" ? 1 : prefs.horizonShort === "5d" ? 5 : 20} />}
-
-        {/* Body */}
-        {prefs.term === "short" && !isFund && (
-          <ShortTermPanel data={shortMutation.data} pending={shortMutation.isPending} models={prefs.models} setModels={(mm) => setPrefs((p) => ({ ...p, models: mm }))} asset={asset} />
-        )}
-        {(prefs.term === "long" || isFund) && longResult && (
-          <LongTermPanel asset={asset} result={longResult} />
-        )}
-        {isFund && <SIPCalculator fund={findFund(asset.name)} horizonLong={prefs.horizonLong} />}
-
-        {screenerOpen && <Screener assetType={prefs.assetType} onClose={() => setScreenerOpen(false)} onPick={(id) => { setPrefs((p) => ({ ...p, assetId: id, assetType: (id.split(":")[0] as AssetType) })); setScreenerOpen(false); }} />}
-
-        <div className="text-center text-xs pt-6" style={{ color: TEXT_DIM }}>
-          Educational forecasts using historical data and statistical models · Not investment advice
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ============ AssetPicker ============
-function AssetPicker({ assetType, value, onChange }: { assetType: AssetType; value: string; onChange: (id: string) => void }) {
-  const universe = useMemo(() => universeFor(assetType), [assetType]);
-  const current = universe.find((u) => u.id === value) ?? universe[0];
+// ── Search combobox ──
+function Search Assets({ selected, onSelect, placeholder = "Search stocks, indices, ETFs, mutual funds..." }: { selected: Asset | null; onSelect: (a: Asset | null) => void; placeholder?: string }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
-  const suggestions = useMemo(() => {
+  const [cursor, setCursor] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  const results = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return universe.slice(0, 10);
-    return universe.filter((u) => u.name.toLowerCase().includes(s) || u.symbol.toLowerCase().includes(s)).slice(0, 12);
-  }, [q, universe]);
+    if (!s) return [] as Asset[];
+    const hits: Asset[] = [];
+    for (const a of UNIVERSE) {
+      if (hits.length >= 40) break;
+      if (a.symbol.toLowerCase().includes(s) || a.name.toLowerCase().includes(s)) hits.push(a);
+    }
+    return hits;
+  }, [q]);
+
+  const showPopular = !q.trim();
+  const popularAssets = useMemo(() => POPULAR.map((k) => UNIVERSE.find((a) => a.key === k)!).filter(Boolean), []);
+
   return (
-    <div className="relative">
-      <div className="flex items-center rounded-md" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-        <Search size={15} style={{ color: TEXT_DIM, marginLeft: 10 }} />
-        <input value={open ? q : `${current?.name ?? ""}`} onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-          onFocus={() => { setOpen(true); setQ(""); }} onBlur={() => setTimeout(() => setOpen(false), 150)}
-          placeholder={`Search ${ASSET_LABEL[assetType].toLowerCase()}…`}
-          className="flex-1 bg-transparent px-2 py-2 text-sm outline-none" style={{ color: "#e6ecf5" }} />
-        {current && <span className="text-xs pr-3" style={{ color: GOLD }}>{current.symbol}</span>}
-      </div>
-      {open && suggestions.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 rounded-md z-30 max-h-72 overflow-auto" style={{ background: CARD_BG, border: `1px solid ${BORDER}` }}>
-          {suggestions.map((s) => (
-            <button key={s.id} onMouseDown={() => { onChange(s.id); setOpen(false); setQ(""); }}
-              className="block w-full text-left px-3 py-2 text-sm hover:bg-[#0d1728]">
-              <div className="flex justify-between gap-2">
-                <span style={{ color: "#e6ecf5" }}>{s.name}</span>
-                <span className="text-xs" style={{ color: GOLD }}>{s.symbol}</span>
-              </div>
-              {s.meta && <div className="text-xs" style={{ color: TEXT_DIM }}>{s.meta}</div>}
-            </button>
-          ))}
+    <div ref={ref} className="relative">
+      {selected ? (
+        <div className="flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+          <div className="text-xs uppercase tracking-wider" style={{ color: MUTED }}>{selected.kind}</div>
+          <div className="font-mono text-sm font-semibold" style={{ color: TEXT }}>{selected.symbol}</div>
+          <div className="text-sm truncate flex-1" style={{ color: MUTED }}>{selected.name}</div>
+          <button onClick={() => { onSelect(null); setQ(""); }} className="rounded-md p-1 hover:bg-white/5" aria-label="Clear">
+            <X size={14} color={MUTED} />
+          </button>
+        </div>
+      ) : (
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" color={MUTED} />
+          <input
+            type="text"
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setOpen(true); setCursor(0); }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={(e) => {
+              const list = showPopular ? popularAssets : results;
+              if (e.key === "ArrowDown") { e.preventDefault(); setCursor((c) => Math.min(list.length - 1, c + 1)); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setCursor((c) => Math.max(0, c - 1)); }
+              else if (e.key === "Enter" && list[cursor]) { onSelect(list[cursor]); setQ(""); setOpen(false); }
+              else if (e.key === "Escape") setOpen(false);
+            }}
+            placeholder={placeholder}
+            className="w-full rounded-xl pl-10 pr-3 py-3 text-sm outline-none"
+            style={{ background: CARD, border: `1px solid ${BORDER}`, color: TEXT, height: 48 }}
+          />
+        </div>
+      )}
+      {open && !selected && (
+        <div className="absolute z-40 mt-2 w-full max-h-96 overflow-auto rounded-xl shadow-xl" style={{ background: "#0f0f22", border: `1px solid ${BORDER}` }}>
+          {showPopular ? (
+            <>
+              <div className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider" style={{ color: MUTED }}>Popular</div>
+              {popularAssets.map((a, i) => <ResultRow key={a.key} asset={a} active={i === cursor} onClick={() => { onSelect(a); setQ(""); setOpen(false); }} />)}
+            </>
+          ) : results.length ? (
+            <>
+              <div className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider" style={{ color: MUTED }}>{results.length} matches</div>
+              {results.map((a, i) => <ResultRow key={a.key} asset={a} active={i === cursor} onClick={() => { onSelect(a); setQ(""); setOpen(false); }} />)}
+            </>
+          ) : (
+            <div className="p-4 text-sm" style={{ color: MUTED }}>No matches.</div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// ============ Short-Term Panel (35-model workbench) ============
-function ShortTermPanel({ data, pending, models, setModels, asset }: { data: ForecastResponse | undefined; pending: boolean; models: string[]; setModels: (m: string[]) => void; asset: Asset }) {
-  const toggleModel = (n: string) => setModels(models.includes(n) ? models.filter((m) => m !== n) : [...models, n]);
-  const toggleFamily = (fam: Family) => {
-    const fm = MODEL_REGISTRY.filter((m) => m.family === fam).map((m) => m.name);
-    const allOn = fm.every((n) => models.includes(n));
-    setModels(allOn ? models.filter((n) => !fm.includes(n)) : Array.from(new Set([...models, ...fm])));
-  };
+function ResultRow({ asset, active, onClick }: { asset: Asset; active: boolean; onClick: () => void }) {
+  const dot = asset.kind === "stock" ? BLUE : asset.kind === "index" ? AMBER : asset.kind === "etf" ? GREEN : "#a78bfa";
   return (
-    <>
-      <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-sm font-medium">Model Selection <span style={{ color: TEXT_DIM }}>· {models.length}/{MODEL_REGISTRY.length} active</span></div>
-          <div className="flex gap-2 text-xs">
-            <button onClick={() => setModels(MODEL_REGISTRY.map((m) => m.name))} style={{ color: GOLD }}>All</button>
-            <span style={{ color: TEXT_DIM }}>·</span>
-            <button onClick={() => setModels([])} style={{ color: TEXT_DIM }}>Clear</button>
-          </div>
-        </div>
-        <FamilyTabs selected={models} onToggleModel={toggleModel} onToggleFamily={toggleFamily} />
-      </div>
-
-      {data?.isDemo && (
-        <div className="rounded-lg p-3 flex items-start gap-2 text-sm" style={{ background: "#3a2c0d", border: `1px solid ${GOLD}`, color: "#f5e5b8" }}>
-          <AlertTriangle size={16} style={{ color: GOLD, flexShrink: 0, marginTop: 2 }} />
-          <div><strong>Demo data</strong> — {data.demoReason} Set <code style={{ background: "#00000040", padding: "1px 5px", borderRadius: 3 }}>FORECAST_API_URL</code> to point /api/forecast at your Python forecasting service.</div>
-        </div>
-      )}
-
-      {pending && <SkeletonBlock />}
-      {!pending && data && (
-        <div className="space-y-5">
-          <ConsensusCard data={data} asset={asset} />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <div className="lg:col-span-2"><PriceChart data={data} /></div>
-            <IntervalCoverageCard data={data} />
-          </div>
-          <Leaderboard models={data.models} />
-          <BacktestPanel data={data} />
-          <ExportBar data={data} asset={asset} />
-        </div>
-      )}
-    </>
+    <button onClick={onClick} className="w-full text-left px-3 py-2 flex items-center gap-3 transition-colors" style={{ background: active ? "rgba(55,138,221,0.1)" : "transparent" }}>
+      <span className="w-2 h-2 rounded-full" style={{ background: dot }} />
+      <span className="font-mono text-xs font-semibold w-28 truncate" style={{ color: TEXT }}>{asset.symbol}</span>
+      <span className="text-sm flex-1 truncate" style={{ color: TEXT }}>{asset.name}</span>
+      <span className="text-[10px] uppercase" style={{ color: MUTED }}>{asset.meta ?? asset.kind}</span>
+    </button>
   );
 }
 
-function ConsensusCard({ data, asset }: { data: ForecastResponse; asset: Asset }) {
-  const c = data.consensus;
-  const color = c.signal === "BUY" ? GREEN : c.signal === "SELL" ? RED : "#94a3b8";
-  const Icon = c.signal === "BUY" ? TrendingUp : c.signal === "SELL" ? TrendingDown : Minus;
+// ── Live quote strip ──
+function QuoteStrip({ meta, asset, cached, onRefresh, isRefreshing }: { meta: YahooMeta | null; asset: Asset; cached: boolean; onRefresh: () => void; isRefreshing: boolean }) {
+  if (!meta || meta.price == null) return null;
+  const change = meta.price - (meta.prevClose ?? meta.price);
+  const changePct = meta.prevClose ? (change / meta.prevClose) * 100 : 0;
+  const positive = change >= 0;
+  const color = positive ? GREEN : RED;
   return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-5">
-      <div className="flex flex-col md:flex-row md:items-center gap-6">
-        <div className="flex items-center gap-4">
-          <div className="w-24 h-24 rounded-lg flex flex-col items-center justify-center" style={{ background: `${color}22`, border: `2px solid ${color}` }}>
-            <Icon size={28} color={color} />
-            <div className="text-lg font-bold mt-1" style={{ color }}>{c.signal}</div>
+    <div className="rounded-xl p-4" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-sm font-semibold" style={{ color: TEXT }}>{asset.symbol}</span>
+            <span className="text-sm" style={{ color: MUTED }}>{meta.longName ?? asset.name}</span>
           </div>
-          <div>
-            <div className="text-xs uppercase" style={{ color: TEXT_DIM, letterSpacing: 1.5 }}>Consensus · {asset.name}</div>
-            <div className="text-3xl font-semibold mt-1" style={{ color }}>₹{c.predictedRange.low.toFixed(2)} – ₹{c.predictedRange.high.toFixed(2)}</div>
-            <div className="text-sm mt-0.5" style={{ color: TEXT_DIM }}>Median ₹{c.predictedRange.median.toFixed(2)} · 10th–90th percentile</div>
+          <div className="flex items-baseline gap-3 mt-1">
+            <span className="text-3xl font-semibold font-mono" style={{ color }}>{fmtINR(meta.price)}</span>
+            <span className="text-sm font-mono" style={{ color }}>{positive ? "▲" : "▼"} {change.toFixed(2)} ({fmtPct(changePct)})</span>
+            <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider" style={{ color: cached ? AMBER : GREEN }}>
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: cached ? AMBER : GREEN }} />
+              {cached ? "Cached" : "Live"}
+            </span>
           </div>
         </div>
-        <div className="flex-1 flex items-center gap-3 md:justify-end flex-wrap">
-          <Chip label="Confidence" value={`${c.confidencePct.toFixed(1)}%`} />
-          <Chip label="Models" value={`${data.models.length}`} />
-          <Chip label="Regime" value={c.regime === "HIGH_VOLATILITY" ? "High Vol" : "Low Vol"} color={c.regime === "HIGH_VOLATILITY" ? AMBER : GREEN} />
-        </div>
+        <button onClick={onRefresh} disabled={isRefreshing} className="rounded-lg p-2 hover:bg-white/5" aria-label="Refresh">
+          {isRefreshing ? <Loader2 size={16} className="animate-spin" color={MUTED} /> : <RefreshCw size={16} color={MUTED} />}
+        </button>
       </div>
-      <div className="mt-4 pt-4 border-t text-sm" style={{ borderColor: BORDER, color: "#cbd5e1" }}>{c.reasoning}</div>
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-x-4 gap-y-2 mt-4 text-xs">
+        <Stat label="Open" value={fmtINR(meta.dayOpen)} />
+        <Stat label="High" value={fmtINR(meta.dayHigh)} />
+        <Stat label="Low" value={fmtINR(meta.dayLow)} />
+        <Stat label="Volume" value={fmtVol(meta.volume)} />
+        <Stat label="52W High" value={fmtINR(meta.w52High)} />
+        <Stat label="52W Low" value={fmtINR(meta.w52Low)} />
+      </div>
     </div>
   );
 }
-function Chip({ label, value, color = GOLD }: { label: string; value: string; color?: string }) {
-  return <div className="px-3 py-2 rounded-md" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-    <div className="text-xs" style={{ color: TEXT_DIM }}>{label}</div>
-    <div className="text-lg font-semibold" style={{ color }}>{value}</div>
-  </div>;
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider" style={{ color: MUTED }}>{label}</div>
+      <div className="font-mono text-sm" style={{ color: TEXT }}>{value}</div>
+    </div>
+  );
 }
 
-function PriceChart({ data }: { data: ForecastResponse }) {
-  const chart = useMemo(() => {
-    const hist = data.historical.slice(-90).map((h) => ({ date: h.date, actual: h.close, median: null as number | null, low: null as number | null, high: null as number | null }));
+// ── Chart tooltip ──
+type TooltipPayloadEntry = { dataKey?: string; value?: number | string | null };
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: TooltipPayloadEntry[]; label?: string | number }) {
+  if (!active || !payload || !payload.length) return null;
+  const p: Record<string, number | undefined> = {};
+  for (const row of payload) if (row.dataKey && typeof row.value === "number") p[String(row.dataKey)] = row.value;
+  return (
+    <div className="rounded-lg px-3 py-2 text-xs" style={{ background: "rgba(10,10,26,0.95)", border: `1px solid ${BORDER}`, color: TEXT }}>
+      <div className="font-mono mb-1" style={{ color: MUTED }}>{label}</div>
+      {p.historical != null && <div>Price: <span className="font-mono">{fmtINR(p.historical)}</span></div>}
+      {p.forecast != null && <div style={{ color: GREEN }}>Forecast: <span className="font-mono">{fmtINR(p.forecast)}</span></div>}
+      {p.upper != null && <div style={{ color: MUTED }}>Upper: <span className="font-mono">{fmtINR(p.upper)}</span></div>}
+      {p.lower != null && <div style={{ color: MUTED }}>Lower: <span className="font-mono">{fmtINR(p.lower)}</span></div>}
+      {p.volume != null && p.volume > 0 && <div style={{ color: MUTED }}>Volume: <span className="font-mono">{fmtVol(p.volume)}</span></div>}
+    </div>
+  );
+}
+
+// ── Main chart ──
+function ForecastChart({ result, currentPrice }: { result: EngineResult; currentPrice: number }) {
+  const data = useMemo(() => {
+    const hist = result.history90.map((h) => ({
+      date: h.date, historical: +h.close.toFixed(2), forecast: null as number | null, upper: null as number | null, lower: null as number | null, volume: h.volume,
+    }));
+    // seam
     const last = hist[hist.length - 1];
-    const fc = data.forecastPath.map((f) => ({ date: f.date, actual: null as number | null, median: f.median, low: f.low, high: f.high }));
-    if (last) fc.unshift({ date: last.date, actual: last.actual, median: last.actual, low: last.actual, high: last.actual });
+    const fc = result.forecastPath.map((f, i) => ({
+      date: f.date,
+      historical: i === 0 ? last?.historical ?? null : null,
+      forecast: f.price, upper: f.upper, lower: f.lower, volume: 0,
+    }));
     return [...hist, ...fc];
+  }, [result]);
+
+  const todayDate = result.history90.at(-1)?.date ?? "";
+  const yDomain: [number, number] = useMemo(() => {
+    let lo = Infinity, hi = -Infinity;
+    for (const d of data) {
+      for (const v of [d.historical, d.forecast, d.upper, d.lower]) {
+        if (typeof v === "number") { if (v < lo) lo = v; if (v > hi) hi = v; }
+      }
+    }
+    const pad = (hi - lo) * 0.05;
+    return [lo - pad, hi + pad];
   }, [data]);
+
   return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4">
-      <div className="text-sm font-medium mb-3">Price Forecast <span className="text-xs" style={{ color: TEXT_DIM }}>· 90d history + forecast band</span></div>
-      <ResponsiveContainer width="100%" height={320}>
-        <ComposedChart data={chart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-          <defs><linearGradient id="bandFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={GOLD} stopOpacity={0.25} /><stop offset="100%" stopColor={GOLD} stopOpacity={0.02} /></linearGradient></defs>
-          <CartesianGrid stroke={BORDER} strokeDasharray="3 3" />
-          <XAxis dataKey="date" tick={{ fill: TEXT_DIM, fontSize: 11 }} minTickGap={30} />
-          <YAxis tick={{ fill: TEXT_DIM, fontSize: 11 }} domain={["auto", "auto"]} tickFormatter={(v: number) => `₹${v.toFixed(0)}`} />
-          <Tooltip contentStyle={{ background: NAVY_BG, border: `1px solid ${BORDER}`, borderRadius: 6 }} labelStyle={{ color: GOLD }} />
-          <Area type="monotone" dataKey="high" stroke="none" fill="url(#bandFill)" />
-          <Area type="monotone" dataKey="low" stroke="none" fill={NAVY_BG} />
-          <Line type="monotone" dataKey="actual" stroke={GOLD} strokeWidth={2} dot={false} isAnimationActive={false} />
-          <Line type="monotone" dataKey="median" stroke={GOLD} strokeDasharray="5 4" strokeWidth={2} dot={false} isAnimationActive={false} />
+    <div style={{ width: "100%", height: 420 }}>
+      <ResponsiveContainer>
+        <ComposedChart data={data} margin={{ top: 10, right: 60, left: 0, bottom: 10 }}>
+          <CartesianGrid stroke="rgba(255,255,255,0.05)" horizontal vertical={false} />
+          <XAxis dataKey="date" tick={{ fill: MUTED, fontSize: 11 }} interval={Math.floor(data.length / 12)} axisLine={{ stroke: BORDER }} tickLine={false} />
+          <YAxis yAxisId="price" domain={yDomain} tick={{ fill: MUTED, fontSize: 11 }} tickFormatter={(v: number) => "₹" + v.toLocaleString("en-IN", { maximumFractionDigits: 0 })} axisLine={false} tickLine={false} width={70} />
+          <YAxis yAxisId="vol" orientation="right" hide domain={[0, "dataMax"]} />
+          <Tooltip content={<ChartTooltip />} />
+          <Bar yAxisId="vol" dataKey="volume" fill="rgba(255,255,255,0.06)" />
+          <Area yAxisId="price" dataKey="upper" stroke="none" fill="rgba(55,138,221,0.14)" isAnimationActive={false} />
+          <Area yAxisId="price" dataKey="lower" stroke="none" fill={BG} isAnimationActive={false} />
+          <Line yAxisId="price" dataKey="historical" stroke="#94a3b8" strokeWidth={2} dot={false} isAnimationActive animationDuration={1200} connectNulls={false} />
+          <Line yAxisId="price" dataKey="forecast" stroke={GREEN} strokeWidth={2.5} strokeDasharray="6 3" dot={false} isAnimationActive animationDuration={1200} connectNulls={false} />
+          <ReferenceLine yAxisId="price" x={todayDate} stroke="rgba(255,255,255,0.3)" label={{ value: "Today", fill: MUTED, fontSize: 11, position: "top" }} />
+          <ReferenceLine yAxisId="price" y={result.targetPrice} stroke={GREEN} strokeDasharray="3 3" strokeOpacity={0.6} label={{ value: `Target ${fmtINR(result.targetPrice)}`, position: "right", fill: GREEN, fontSize: 11 }} />
+          <ReferenceLine yAxisId="price" y={result.supportLevels.s1} stroke={AMBER} strokeDasharray="2 4" strokeOpacity={0.5} label={{ value: `S1 ${fmtINR(result.supportLevels.s1, 0)}`, position: "right", fill: AMBER, fontSize: 10 }} />
+          <ReferenceLine yAxisId="price" y={result.resistanceLevels.r1} stroke={RED} strokeDasharray="2 4" strokeOpacity={0.5} label={{ value: `R1 ${fmtINR(result.resistanceLevels.r1, 0)}`, position: "right", fill: RED, fontSize: 10 }} />
+          <ReferenceLine yAxisId="price" y={currentPrice} stroke="rgba(255,255,255,0.2)" strokeDasharray="1 2" />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
   );
 }
-function IntervalCoverageCard({ data }: { data: ForecastResponse }) {
-  const gap = Math.abs(data.intervalCoverage.actualPct - data.intervalCoverage.targetPct);
-  const ok = gap <= 5;
-  return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4 space-y-4">
-      <div><div className="text-sm font-medium">Interval Calibration</div><div className="text-xs" style={{ color: TEXT_DIM }}>Are the bands honest?</div></div>
-      <div><div className="text-3xl font-semibold" style={{ color: ok ? GREEN : AMBER }}>{data.intervalCoverage.actualPct.toFixed(1)}%</div>
-        <div className="text-xs mt-1" style={{ color: TEXT_DIM }}>90-day coverage · target {data.intervalCoverage.targetPct}%</div></div>
-      <div className="text-xs pt-3 border-t" style={{ borderColor: BORDER, color: TEXT_DIM }}>Walk-forward expanding-window validation.</div>
-    </div>
-  );
-}
-function FamilyTabs({ selected, onToggleModel, onToggleFamily }: { selected: string[]; onToggleModel: (n: string) => void; onToggleFamily: (f: Family) => void }) {
-  const [active, setActive] = useState<Family>("deep_learning");
-  const famModels = MODEL_REGISTRY.filter((m) => m.family === active);
-  return (
-    <>
-      <div className="flex gap-1 border-b mb-3 overflow-x-auto" style={{ borderColor: BORDER }}>
-        {FAMILIES.map((f) => {
-          const count = MODEL_REGISTRY.filter((m) => m.family === f && selected.includes(m.name)).length;
-          const total = MODEL_REGISTRY.filter((m) => m.family === f).length;
-          const on = active === f;
-          return <button key={f} onClick={() => setActive(f)} className="px-3 py-2 text-sm whitespace-nowrap"
-            style={{ color: on ? GOLD : TEXT_DIM, borderBottom: `2px solid ${on ? GOLD : "transparent"}`, fontWeight: on ? 600 : 500 }}>
-            {FAMILY_LABEL[f]} <span className="text-xs opacity-70">({count}/{total})</span>
-          </button>;
-        })}
-      </div>
-      <div className="flex justify-between items-center mb-2">
-        <button onClick={() => onToggleFamily(active)} className="text-xs" style={{ color: GOLD }}>Toggle all in {FAMILY_LABEL[active]}</button>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-        {famModels.map((m) => {
-          const on = selected.includes(m.name);
-          return <button key={m.name} onClick={() => onToggleModel(m.name)} className="px-3 py-2 text-xs rounded text-left"
-            style={{ background: on ? "#1a2542" : "#0d1728", border: `1px solid ${on ? GOLD : BORDER}`, color: on ? "#e6ecf5" : TEXT_DIM }}>
-            <span className="inline-block w-2 h-2 rounded-full mr-2" style={{ background: on ? GOLD : "#3a4560" }} />{m.name}
-          </button>;
-        })}
-      </div>
-    </>
-  );
-}
 
-type SortKey = "directionalAccuracyPct" | "rmse" | "mae" | "mapePct" | "weight" | "name";
-function Leaderboard({ models }: { models: ModelForecast[] }) {
-  const [sort, setSort] = useState<SortKey>("directionalAccuracyPct");
-  const [asc, setAsc] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const sorted = useMemo(() => {
-    const arr = [...models]; arr.sort((a, b) => {
-      const av = a[sort] as number | string; const bv = b[sort] as number | string;
-      if (typeof av === "number" && typeof bv === "number") return asc ? av - bv : bv - av;
-      return asc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
-    }); return arr;
-  }, [models, sort, asc]);
-  const toggle = (k: SortKey) => { if (sort === k) setAsc(!asc); else { setSort(k); setAsc(false); } };
-  const dc = (v: number) => v > 58 ? GREEN : v >= 50 ? AMBER : RED;
+// ── Mini indicator charts ──
+function MiniCharts({ result }: { result: EngineResult }) {
   return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4">
-      <div className="text-sm font-medium mb-3">Model Leaderboard <span style={{ color: TEXT_DIM }}>· {models.length} active · click row to expand</span></div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead><tr style={{ color: TEXT_DIM, borderBottom: `1px solid ${BORDER}` }} className="text-xs uppercase">
-            <Th label="Model" k="name" sort={sort} asc={asc} onClick={toggle} align="left" />
-            <th className="px-3 py-2 text-left">Family</th>
-            <Th label="RMSE" k="rmse" sort={sort} asc={asc} onClick={toggle} />
-            <Th label="MAE" k="mae" sort={sort} asc={asc} onClick={toggle} />
-            <Th label="MAPE %" k="mapePct" sort={sort} asc={asc} onClick={toggle} />
-            <Th label="Dir. Acc." k="directionalAccuracyPct" sort={sort} asc={asc} onClick={toggle} />
-            <Th label="Weight" k="weight" sort={sort} asc={asc} onClick={toggle} />
-          </tr></thead>
-          <tbody>{sorted.map((m) => (
-            <Fragment key={m.name}>
-              <tr onClick={() => setExpanded(expanded === m.name ? null : m.name)} className="cursor-pointer hover:bg-[#0d1728]" style={{ borderBottom: `1px solid ${BORDER}` }}>
-                <td className="px-3 py-2.5 flex items-center gap-2">{expanded === m.name ? <ChevronDown size={14} /> : <ChevronRight size={14} />}<span>{m.name}</span></td>
-                <td className="px-3 py-2.5 text-xs" style={{ color: TEXT_DIM }}>{FAMILY_LABEL[m.family]}</td>
-                <td className="px-3 py-2.5 text-right">{m.rmse.toFixed(2)}</td>
-                <td className="px-3 py-2.5 text-right">{m.mae.toFixed(2)}</td>
-                <td className="px-3 py-2.5 text-right">{m.mapePct.toFixed(2)}</td>
-                <td className="px-3 py-2.5 text-right font-semibold" style={{ color: dc(m.directionalAccuracyPct) }}>{m.directionalAccuracyPct.toFixed(1)}</td>
-                <td className="px-3 py-2.5 text-right" style={{ color: m.weight > 0 ? GOLD : TEXT_DIM }}>{(m.weight * 100).toFixed(2)}%</td>
-              </tr>
-              {expanded === m.name && (
-                <tr style={{ background: "#0a1121" }}><td colSpan={7} className="px-4 py-3">
-                  <div className="text-xs mb-2" style={{ color: TEXT_DIM }}>Last 30 predictions vs actual · Target ₹{m.predictedPrice.toFixed(2)}</div>
-                  <ResponsiveContainer width="100%" height={140}><LineChart data={m.recentPredictions}>
-                    <CartesianGrid stroke={BORDER} strokeDasharray="3 3" /><XAxis dataKey="date" tick={{ fill: TEXT_DIM, fontSize: 10 }} minTickGap={40} />
-                    <YAxis tick={{ fill: TEXT_DIM, fontSize: 10 }} domain={["auto", "auto"]} />
-                    <Tooltip contentStyle={{ background: NAVY_BG, border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: 12 }} />
-                    <Line type="monotone" dataKey="actual" stroke={GOLD} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                    <Line type="monotone" dataKey="predicted" stroke={BLUE} strokeWidth={1.5} strokeDasharray="3 3" dot={false} isAnimationActive={false} />
-                  </LineChart></ResponsiveContainer>
-                </td></tr>
-              )}
-            </Fragment>
-          ))}</tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-function Th({ label, k, sort, asc, onClick, align = "right" }: { label: string; k: SortKey; sort: SortKey; asc: boolean; onClick: (k: SortKey) => void; align?: "left" | "right" }) {
-  const on = sort === k;
-  return <th onClick={() => onClick(k)} className={`px-3 py-2 cursor-pointer select-none ${align === "right" ? "text-right" : "text-left"}`} style={{ color: on ? GOLD : TEXT_DIM }}>{label}{on ? (asc ? " ↑" : " ↓") : ""}</th>;
-}
-function BacktestPanel({ data }: { data: ForecastResponse }) {
-  const [open, setOpen] = useState(true);
-  const recent = data.backtestHistory.slice(-20);
-  const avg = recent.reduce((s, p) => s + p.rollingDirAccPct, 0) / (recent.length || 1);
-  const reg = avg > 55 ? { label: "Working well", color: GREEN } : avg >= 50 ? { label: "Mixed", color: AMBER } : { label: "Struggling", color: RED };
-  return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg">
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between p-4">
-        <div className="flex items-center gap-3">{open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          <div className="text-sm font-medium">Backtest & Validation</div>
-          <span className="text-xs px-2 py-0.5 rounded" style={{ background: `${reg.color}22`, color: reg.color }}>{reg.label} · {avg.toFixed(1)}%</span>
-        </div>
-        <div className="text-xs" style={{ color: TEXT_DIM }}>90d rolling · 20d window</div>
-      </button>
-      {open && <div className="p-4 pt-0">
-        <ResponsiveContainer width="100%" height={200}><LineChart data={data.backtestHistory}>
-          <CartesianGrid stroke={BORDER} strokeDasharray="3 3" /><XAxis dataKey="date" tick={{ fill: TEXT_DIM, fontSize: 10 }} minTickGap={30} />
-          <YAxis tick={{ fill: TEXT_DIM, fontSize: 10 }} domain={[30, 80]} tickFormatter={(v: number) => `${v}%`} />
-          <ReferenceLine y={50} stroke={TEXT_DIM} strokeDasharray="3 3" />
-          <Tooltip contentStyle={{ background: NAVY_BG, border: `1px solid ${BORDER}`, borderRadius: 6 }} />
-          <Line type="monotone" dataKey="rollingDirAccPct" stroke={GOLD} strokeWidth={2} dot={false} isAnimationActive={false} />
-        </LineChart></ResponsiveContainer>
-      </div>}
-    </div>
-  );
-}
-
-// ============ Long-Term Panel ============
-function LongTermPanel({ asset, result }: { asset: Asset; result: LongTermResult }) {
-  const isFund = asset.type === "fund";
-  const chart = useMemo(() => result.timestamps.map((t, i) => ({
-    date: new Date(t).toISOString().slice(0, 10),
-    cagr: +result.cagrPath[i].toFixed(2),
-    median: +result.mcMedian[i].toFixed(2),
-    low: +result.mcLow[i].toFixed(2),
-    high: +result.mcHigh[i].toFixed(2),
-  })), [result]);
-  const totalRet = ((result.endMedian / result.currentPrice) - 1) * 100;
-  const color = totalRet > 0 ? GREEN : RED;
-  return (
-    <div className="space-y-5">
-      <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-5">
-        <div className="flex flex-wrap items-center gap-6">
-          <div>
-            <div className="text-xs uppercase" style={{ color: TEXT_DIM, letterSpacing: 1.5 }}>Long-Term Projection · {asset.name}</div>
-            <div className="text-3xl font-semibold mt-1" style={{ color }}>
-              {isFund ? "" : "₹"}{result.endMedian.toFixed(2)}{isFund ? "" : ""}
-              <span className="text-lg ml-2" style={{ color }}>({totalRet >= 0 ? "+" : ""}{totalRet.toFixed(1)}%)</span>
-            </div>
-            <div className="text-sm mt-1" style={{ color: TEXT_DIM }}>
-              80% band: {result.endLow.toFixed(2)} – {result.endHigh.toFixed(2)} · {result.horizonLabel} horizon
-            </div>
-          </div>
-          <div className="flex-1 flex gap-3 flex-wrap md:justify-end">
-            <Chip label="CAGR used" value={`${result.cagrUsed.toFixed(1)}%`} />
-            <Chip label="Ann. Vol" value={`${result.sigmaAnnual.toFixed(1)}%`} color={result.sigmaAnnual > 30 ? AMBER : GREEN} />
-            <Chip label="P(positive)" value={`${result.probPositive.toFixed(0)}%`} color={result.probPositive > 60 ? GREEN : result.probPositive > 40 ? AMBER : RED} />
-            <Chip label="Paths" value={`${result.paths}`} />
-          </div>
-        </div>
-        <div className="mt-4 pt-4 border-t text-sm" style={{ borderColor: BORDER, color: "#cbd5e1" }}>
-          Central line uses <strong>{cagrSourceLabel(result.cagrSource)}</strong>. The band is a lognormal Monte Carlo simulation over {result.paths} paths using historical volatility. Wider bands = higher uncertainty.
-        </div>
-      </div>
-
-      <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4">
-        <div className="text-sm font-medium mb-3">Monte Carlo Projection <span className="text-xs" style={{ color: TEXT_DIM }}>· 80% confidence band</span></div>
-        <ResponsiveContainer width="100%" height={340}>
-          <ComposedChart data={chart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <defs><linearGradient id="mcBand" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={GOLD} stopOpacity={0.28} /><stop offset="100%" stopColor={GOLD} stopOpacity={0.02} /></linearGradient></defs>
-            <CartesianGrid stroke={BORDER} strokeDasharray="3 3" />
-            <XAxis dataKey="date" tick={{ fill: TEXT_DIM, fontSize: 11 }} minTickGap={40} />
-            <YAxis tick={{ fill: TEXT_DIM, fontSize: 11 }} domain={["auto", "auto"]} tickFormatter={(v: number) => v.toFixed(0)} />
-            <Tooltip contentStyle={{ background: NAVY_BG, border: `1px solid ${BORDER}`, borderRadius: 6 }} labelStyle={{ color: GOLD }} />
-            <Area type="monotone" dataKey="high" stroke="none" fill="url(#mcBand)" />
-            <Area type="monotone" dataKey="low" stroke="none" fill={NAVY_BG} />
-            <Line type="monotone" dataKey="median" stroke={GOLD} strokeWidth={2} dot={false} isAnimationActive={false} name="MC Median" />
-            <Line type="monotone" dataKey="cagr" stroke={BLUE} strokeWidth={1.5} strokeDasharray="4 4" dot={false} isAnimationActive={false} name="CAGR Line" />
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <MiniPanel title="RSI (14)" value={result.rsi.toFixed(1)}>
+        <ResponsiveContainer width="100%" height={80}>
+          <LineChart data={result.rsi90} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+            <XAxis dataKey="date" hide />
+            <YAxis domain={[0, 100]} hide />
+            <ReferenceLine y={70} stroke={RED} strokeDasharray="2 2" strokeOpacity={0.4} />
+            <ReferenceLine y={30} stroke={GREEN} strokeDasharray="2 2" strokeOpacity={0.4} />
+            <Line dataKey="rsi" stroke={BLUE} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </MiniPanel>
+      <MiniPanel title="MACD Histogram" value={result.macd.hist.toFixed(2)}>
+        <ResponsiveContainer width="100%" height={80}>
+          <ComposedChart data={result.macd90} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+            <XAxis dataKey="date" hide />
+            <YAxis hide />
+            <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
+            <Bar dataKey="hist">
+              {result.macd90.map((d, i) => <ReferenceLine key={i} y={d.hist} />)}
+            </Bar>
+            <Line dataKey="hist" stroke="none" />
           </ComposedChart>
         </ResponsiveContainer>
-        <div className="flex gap-4 text-xs mt-2" style={{ color: TEXT_DIM }}>
-          <span><span className="inline-block w-3 h-0.5 mr-1" style={{ background: GOLD }} />Monte Carlo median</span>
-          <span><span className="inline-block w-3 h-0.5 mr-1" style={{ background: BLUE, borderTop: "1px dashed" }} />CAGR extrapolation</span>
-          <span><span className="inline-block w-3 h-2 mr-1" style={{ background: `${GOLD}44` }} />80% confidence band</span>
-        </div>
-      </div>
-
-      {isFund && findFund(asset.name) && <FundSnapshot fund={findFund(asset.name)!} />}
-      {asset.type === "etf" && findEtf(asset.name) && <EtfSnapshot etf={findEtf(asset.name)!} />}
+      </MiniPanel>
+      <MiniPanel title="Volume (90d)" value={fmtVol(result.history90.at(-1)?.volume)}>
+        <ResponsiveContainer width="100%" height={80}>
+          <ComposedChart data={result.history90} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+            <XAxis dataKey="date" hide />
+            <YAxis hide />
+            <Bar dataKey="volume" fill={BLUE} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </MiniPanel>
     </div>
   );
 }
 
-function FundSnapshot({ fund }: { fund: FundRow }) {
+function MiniPanel({ title, value, children }: { title: string; value: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4">
-      <div className="text-sm font-medium mb-3">Fund Snapshot · {fund.cat}</div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-        {[["1Y", fund.r1], ["3Y", fund.r3], ["5Y", fund.r5], ["10Y", fund.r10]].map(([k, v]) => (
-          <div key={k as string} className="p-3 rounded" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-            <div className="text-xs" style={{ color: TEXT_DIM }}>{k} Return</div>
-            <div className="text-lg font-semibold" style={{ color: (v as number | null) == null ? TEXT_DIM : (v as number) >= 0 ? GREEN : RED }}>
-              {(v as number | null) == null ? "—" : `${(v as number).toFixed(2)}%`}
+    <div className="rounded-xl p-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-[10px] uppercase tracking-wider" style={{ color: MUTED }}>{title}</span>
+        <span className="font-mono text-xs" style={{ color: TEXT }}>{value}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Signal dashboard ──
+function SignalDashboard({ result }: { result: EngineResult }) {
+  const color = signalColor(result.signal);
+  const agree = Math.max(result.buyCount, result.sellCount);
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl p-5 text-center" style={{ background: CARD, border: `2px solid ${color}` }}>
+        <div className="text-2xl font-bold tracking-wide" style={{ color }}>{result.signal}</div>
+        <div className="mt-2 text-xs" style={{ color: MUTED }}>
+          Composite <span className="font-mono" style={{ color: TEXT }}>{result.compositeScore >= 0 ? "+" : ""}{result.compositeScore.toFixed(3)}</span>
+          <span className="mx-2">·</span>
+          Confidence <span className="font-mono" style={{ color: TEXT }}>{result.confidence.toFixed(1)}%</span>
+        </div>
+        <div className="mt-3 flex items-center justify-center gap-2 text-xs font-mono" style={{ color: MUTED }}>
+          <span style={{ color: GREEN }}>{result.buyCount} Buy</span>
+          <span>·</span>
+          <span style={{ color: RED }}>{result.sellCount} Sell</span>
+          <span>·</span>
+          <span style={{ color: AMBER }}>{result.holdCount} Hold</span>
+        </div>
+        <div className="mt-3 h-2 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.08)" }}>
+          <div className="h-full" style={{ width: `${(agree / 12) * 100}%`, background: color }} />
+        </div>
+        <div className="mt-1 text-[10px]" style={{ color: MUTED }}>{agree}/12 factors agree</div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        <TargetCard emoji="🐻" label="Bear" value={result.bearTarget} basis={result.forecastPath[0]?.price ?? 1} tint={RED} />
+        <TargetCard emoji="📊" label="Base" value={result.targetPrice} basis={result.forecastPath[0]?.price ?? 1} tint={BLUE} />
+        <TargetCard emoji="🐂" label="Bull" value={result.bullTarget} basis={result.forecastPath[0]?.price ?? 1} tint={GREEN} />
+      </div>
+
+      <div className="rounded-xl p-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+        <div className="text-[10px] uppercase tracking-wider mb-2" style={{ color: MUTED }}>Support & Resistance</div>
+        <SRRow label="R2" value={result.resistanceLevels.r2} color={RED} />
+        <SRRow label="R1" value={result.resistanceLevels.r1} color={RED} />
+        <SRRow label="Pivot" value={result.supportLevels.pivot} color={MUTED} />
+        <SRRow label="S1" value={result.supportLevels.s1} color={GREEN} />
+        <SRRow label="S2" value={result.supportLevels.s2} color={GREEN} />
+      </div>
+    </div>
+  );
+}
+
+function TargetCard({ emoji, label, value, basis, tint }: { emoji: string; label: string; value: number; basis: number; tint: string }) {
+  const pct = ((value - basis) / basis) * 100;
+  return (
+    <div className="rounded-xl p-2.5 text-center" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+      <div className="text-lg">{emoji}</div>
+      <div className="text-[10px] uppercase" style={{ color: MUTED }}>{label}</div>
+      <div className="font-mono text-sm" style={{ color: TEXT }}>{fmtINR(value, 0)}</div>
+      <div className="font-mono text-[11px]" style={{ color: tint }}>{fmtPct(pct)}</div>
+    </div>
+  );
+}
+function SRRow({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="flex items-center justify-between text-xs py-1">
+      <span className="font-mono" style={{ color }}>{label}</span>
+      <span className="font-mono" style={{ color: TEXT }}>{fmtINR(value, 0)}</span>
+    </div>
+  );
+}
+
+// ── Factor table ──
+function FactorTable({ result }: { result: EngineResult }) {
+  const rows = [...result.factors].sort((a, b) => Math.abs(b.score) - Math.abs(a.score));
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+      <div className="px-3 py-2 text-[10px] uppercase tracking-wider" style={{ color: MUTED, borderBottom: `1px solid ${BORDER}` }}>12 Factors · sorted by weight</div>
+      <div className="divide-y" style={{ borderColor: BORDER }}>
+        {rows.map((f) => {
+          const color = f.score > 0.15 ? GREEN : f.score < -0.15 ? RED : AMBER;
+          const barPct = Math.min(100, Math.abs(f.score) * 100);
+          return (
+            <div key={f.key} className="px-3 py-2 grid grid-cols-[8px_1fr_60px_80px] gap-3 items-center" style={{ borderLeft: `3px solid ${color}` }}>
+              <span />
+              <div>
+                <div className="text-xs font-medium" style={{ color: TEXT }}>{f.label}</div>
+                <div className="text-[11px]" style={{ color: MUTED }}>{f.detail}</div>
+              </div>
+              <div className="font-mono text-xs text-right" style={{ color }}>{f.score >= 0 ? "+" : ""}{f.score.toFixed(2)}</div>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+                <div className="h-full" style={{ width: `${barPct}%`, background: color, marginLeft: f.score < 0 ? `${100 - barPct}%` : 0 }} />
+              </div>
             </div>
-          </div>
-        ))}
-        <div className="p-3 rounded" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-          <div className="text-xs" style={{ color: TEXT_DIM }}>Expense</div>
-          <div className="text-lg font-semibold" style={{ color: GOLD }}>{fund.er == null ? "—" : `${fund.er.toFixed(2)}%`}</div>
-        </div>
-        <div className="p-3 rounded" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-          <div className="text-xs" style={{ color: TEXT_DIM }}>Rating</div>
-          <div className="text-lg font-semibold" style={{ color: GOLD }}>{"★".repeat(fund.rating)}<span style={{ color: TEXT_DIM }}>{"★".repeat(5 - fund.rating)}</span></div>
-        </div>
-        <div className="p-3 rounded" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-          <div className="text-xs" style={{ color: TEXT_DIM }}>Risk</div>
-          <div className="text-lg font-semibold" style={{ color: fund.risk.includes("Very") ? RED : AMBER }}>{fund.risk}</div>
-        </div>
-        <div className="p-3 rounded" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-          <div className="text-xs" style={{ color: TEXT_DIM }}>Grade</div>
-          <div className="text-lg font-semibold" style={{ color: fund.grade.includes("Above") || fund.grade.includes("High") ? GREEN : TEXT_DIM }}>{fund.grade}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-function EtfSnapshot({ etf }: { etf: ETFRow }) {
-  return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4">
-      <div className="text-sm font-medium mb-3">ETF Snapshot · {etf.cat}</div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-        <Chip label="NAV" value={etf.nav ? `₹${etf.nav.toFixed(2)}` : "—"} />
-        <Chip label="Day %" value={etf.chg ? `${etf.chg.toFixed(2)}%` : "—"} color={(etf.chg ?? 0) >= 0 ? GREEN : RED} />
-        <Chip label="AUM" value={etf.aum ? `₹${etf.aum.toLocaleString()} Cr` : "—"} />
-        <Chip label="Expense" value={etf.er ? `${etf.er.toFixed(2)}%` : "—"} />
-        <Chip label="1Y" value={etf.r1 != null ? `${etf.r1.toFixed(1)}%` : "—"} color={(etf.r1 ?? 0) >= 0 ? GREEN : RED} />
-        <Chip label="3Y" value={etf.r3 != null ? `${etf.r3.toFixed(1)}%` : "—"} />
-        <Chip label="5Y" value={etf.r5 != null ? `${etf.r5.toFixed(1)}%` : "—"} />
-        <Chip label="1M" value={etf.r1m != null ? `${etf.r1m.toFixed(2)}%` : "—"} color={(etf.r1m ?? 0) >= 0 ? GREEN : RED} />
-      </div>
-    </div>
-  );
-}
-
-// ============ SIP Calculator ============
-function SIPCalculator({ fund, horizonLong }: { fund: FundRow | undefined; horizonLong: LongHorizon }) {
-  const [amount, setAmount] = useState(10000);
-  if (!fund) return null;
-  const spec = LONG_HORIZONS.find((h) => h.id === horizonLong)!;
-  const cagr = (fund.r5 ?? fund.r3 ?? fund.r1 ?? 12) / 100;
-  const months = Math.round(spec.years * 12);
-  const monthlyRate = Math.pow(1 + cagr, 1 / 12) - 1;
-  const fv = monthlyRate === 0 ? amount * months : amount * ((Math.pow(1 + monthlyRate, months) - 1) / monthlyRate) * (1 + monthlyRate);
-  const invested = amount * months;
-  const gain = fv - invested;
-  return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4">
-      <div className="text-sm font-medium mb-3 flex items-center gap-2"><Calculator size={16} style={{ color: GOLD }} /> SIP Calculator · {spec.label} @ {(cagr * 100).toFixed(1)}% CAGR</div>
-      <div className="flex flex-wrap items-center gap-4">
-        <label className="text-sm">Monthly SIP: <span style={{ color: GOLD }}>₹</span>
-          <input type="number" value={amount} onChange={(e) => setAmount(Math.max(0, Number(e.target.value)))} className="ml-1 w-32 px-2 py-1 rounded" style={{ background: "#0d1728", border: `1px solid ${BORDER}`, color: "#e6ecf5" }} />
-        </label>
-        <Chip label="Invested" value={`₹${(invested / 100000).toFixed(2)}L`} />
-        <Chip label="Future Value" value={`₹${(fv / 100000).toFixed(2)}L`} color={GREEN} />
-        <Chip label="Est. Gain" value={`₹${(gain / 100000).toFixed(2)}L`} color={GOLD} />
-        <Chip label="Multiplier" value={`${(fv / invested).toFixed(2)}×`} />
-      </div>
-      <div className="text-xs mt-3" style={{ color: TEXT_DIM }}>Compounded monthly at the fund's trailing CAGR. Actual returns will vary — this is a mathematical projection, not a guarantee.</div>
-    </div>
-  );
-}
-
-// ============ Compare Bar ============
-function CompareBar({ ids, term, horizonShort, horizonLong, models, onRemove, onClear }: { ids: string[]; term: Term; horizonShort: Horizon; horizonLong: LongHorizon; models: string[]; onRemove: (id: string) => void; onClear: () => void }) {
-  const rows = useMemo(() => ids.map((id) => {
-    const a = assetById(id); if (!a) return null;
-    if (a.type === "fund") {
-      const fund = findFund(a.name);
-      const spec = LONG_HORIZONS.find((h) => h.id === horizonLong)!;
-      const cagr = (fund?.r5 ?? fund?.r3 ?? fund?.r1 ?? 12) / 100;
-      const proj = 100 * Math.pow(1 + cagr, spec.years);
-      return { asset: a, signal: "—", target: proj, cagr: cagr * 100 };
-    }
-    if (term === "long") {
-      const bars = synthBars(a.id, 500);
-      const r = runLongTermForecast({ bars, horizon: horizonLong, confidence: 80, mcPaths: 400 });
-      return { asset: a, signal: r.probPositive > 55 ? "BULL" : r.probPositive < 45 ? "BEAR" : "NEUTRAL", target: r.endMedian, cagr: r.cagrUsed };
-    }
-    const fc = generateMockForecast(a.symbol, horizonShort, models);
-    return { asset: a, signal: fc.consensus.signal, target: fc.consensus.predictedRange.median, cagr: null };
-  }).filter(Boolean) as { asset: Asset; signal: string; target: number; cagr: number | null }[], [ids, term, horizonShort, horizonLong, models]);
-
-  return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-sm font-medium flex items-center gap-2"><GitCompare size={14} style={{ color: GOLD }} /> Comparison</div>
-        <button onClick={onClear} className="text-xs" style={{ color: TEXT_DIM }}>Clear all</button>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        {rows.map((r) => (
-          <div key={r.asset.id} className="p-3 rounded relative" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-            <button onClick={() => onRemove(r.asset.id)} className="absolute top-2 right-2" style={{ color: TEXT_DIM }}><X size={14} /></button>
-            <div className="text-xs" style={{ color: TEXT_DIM }}>{ASSET_LABEL[r.asset.type]}</div>
-            <div className="text-sm font-semibold pr-4" style={{ color: "#e6ecf5" }}>{r.asset.name}</div>
-            <div className="mt-2 flex gap-3 text-xs">
-              <span>Signal: <strong style={{ color: r.signal === "BUY" || r.signal === "BULL" ? GREEN : r.signal === "SELL" || r.signal === "BEAR" ? RED : AMBER }}>{r.signal}</strong></span>
-              <span>Target: <strong style={{ color: GOLD }}>{r.target.toFixed(1)}</strong></span>
-              {r.cagr != null && <span>CAGR: <strong style={{ color: GOLD }}>{r.cagr.toFixed(1)}%</strong></span>}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ============ Watchlist Strip ============
-function WatchlistStrip({ ids, onOpen, onRemove }: { ids: string[]; onOpen: (id: string) => void; onRemove: (id: string) => void }) {
-  return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-3">
-      <div className="text-xs uppercase mb-2" style={{ color: TEXT_DIM, letterSpacing: 1.5 }}>Watchlist</div>
-      <div className="flex gap-2 flex-wrap">
-        {ids.map((id) => { const a = assetById(id); if (!a) return null;
-          return <div key={id} className="flex items-center gap-2 px-3 py-1.5 rounded text-xs" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-            <button onClick={() => onOpen(id)} style={{ color: "#e6ecf5" }}>{a.name}</button>
-            <button onClick={() => onRemove(id)} style={{ color: TEXT_DIM }}><X size={12} /></button>
-          </div>;
+          );
         })}
       </div>
     </div>
   );
 }
 
-// ============ Screener ============
-function Screener({ assetType, onClose, onPick }: { assetType: AssetType; onClose: () => void; onPick: (id: string) => void }) {
-  const [q, setQ] = useState("");
-  const [cat, setCat] = useState<string>("All");
-  const [minRet, setMinRet] = useState<string>("");
-  const [maxEr, setMaxEr] = useState<string>("");
+// ── Fund-specific projection ──
+interface FundProjection { years: number[]; values: number[]; cagr: number; source: string }
+function projectFund(a: Asset, years = [1, 3, 5, 10]): FundProjection | null {
+  const fr = a.fundReturns;
+  if (!fr) return null;
+  const nav = fr.nav ?? 100;
+  // Pick a best-available CAGR (converting cumulative returns to annualised)
+  let cagr: number | null = null; let src = "";
+  if (fr.r5 != null) { cagr = Math.pow(1 + fr.r5 / 100, 1 / 5) - 1; src = "5Y CAGR"; }
+  else if (fr.r3 != null) { cagr = Math.pow(1 + fr.r3 / 100, 1 / 3) - 1; src = "3Y CAGR"; }
+  else if (fr.r1 != null) { cagr = fr.r1 / 100; src = "1Y return"; }
+  if (cagr == null) return null;
+  const values = years.map((y) => nav * Math.pow(1 + cagr!, y));
+  return { years, values, cagr: cagr * 100, source: src };
+}
 
-  const universe = universeFor(assetType);
-  const cats = useMemo(() => ["All", ...Array.from(new Set(universe.map((u) => u.meta || "").filter(Boolean)))], [universe]);
+// ── Page ──
+function ForecastPage() {
+  const [selected, setSelected] = useState<Asset | null>(() => UNIVERSE.find((a) => a.key === "stock:RELIANCE") ?? null);
+  const [compareOn, setCompareOn] = useState(false);
+  const [selected2, setSelected2] = useState<Asset | null>(null);
+  const [horizon, setHorizon] = useState<Horizon>("1M");
+  const [watch, setWatch] = useState<string[]>(() => {
+    try { const r = typeof localStorage !== "undefined" ? localStorage.getItem(LS_WATCH) : null; return r ? JSON.parse(r) as string[] : []; } catch { return []; }
+  });
+  useEffect(() => { try { localStorage.setItem(LS_WATCH, JSON.stringify(watch)); } catch { /* ignore */ } }, [watch]);
 
-  const rows = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    const mr = minRet === "" ? null : Number(minRet);
-    const me = maxEr === "" ? null : Number(maxEr);
-    return universe.filter((u) => {
-      if (s && !u.name.toLowerCase().includes(s) && !u.symbol.toLowerCase().includes(s)) return false;
-      if (cat !== "All" && u.meta !== cat) return false;
-      if (assetType === "fund") { const f = findFund(u.name); if (!f) return false;
-        if (mr !== null && (f.r3 ?? -999) < mr) return false;
-        if (me !== null && (f.er ?? 999) > me) return false;
-      }
-      if (assetType === "etf") { const e = findEtf(u.name); if (!e) return false;
-        if (mr !== null && (e.r3 ?? -999) < mr) return false;
-        if (me !== null && (e.er ?? 999) > me) return false;
-      }
-      return true;
-    }).slice(0, 200);
-  }, [universe, q, cat, minRet, maxEr, assetType]);
+  const primary = useSlot(selected, horizon);
+  const secondary = useSlot(compareOn ? selected2 : null, horizon);
+
+  const isWatched = selected ? watch.includes(selected.key) : false;
+  function toggleWatch() {
+    if (!selected) return;
+    setWatch((w) => w.includes(selected.key) ? w.filter((k) => k !== selected.key) : [...w, selected.key]);
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 md:p-8" style={{ background: "rgba(0,0,0,0.7)" }} onClick={onClose}>
-      <div className="w-full max-w-5xl rounded-lg overflow-hidden" style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: BORDER }}>
-          <div className="text-lg font-semibold" style={{ color: GOLD }}>Screener · {ASSET_LABEL[assetType]}</div>
-          <button onClick={onClose} style={{ color: TEXT_DIM }}><X size={20} /></button>
+    <div className="min-h-screen p-4 md:p-6" style={{ background: BG, color: TEXT }}>
+      <div className="max-w-[1440px] mx-auto space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold">Forecast Workbench</h1>
+            <p className="text-sm" style={{ color: MUTED }}>Live NSE/BSE data · 12-factor engine · Dexter AI commentary</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setCompareOn((v) => !v); if (compareOn) setSelected2(null); }}
+              className="rounded-lg px-3 py-2 text-xs font-medium inline-flex items-center gap-2"
+              style={{ background: compareOn ? BLUE : CARD, border: `1px solid ${BORDER}`, color: TEXT }}
+            >
+              <GitCompare size={14} /> {compareOn ? "Comparing" : "Compare"}
+            </button>
+            <button
+              onClick={toggleWatch}
+              disabled={!selected}
+              className="rounded-lg px-3 py-2 text-xs font-medium inline-flex items-center gap-2 disabled:opacity-40"
+              style={{ background: CARD, border: `1px solid ${BORDER}`, color: TEXT }}
+            >
+              {isWatched ? <StarOff size={14} /> : <Star size={14} />} Watchlist
+            </button>
+          </div>
         </div>
-        <div className="p-4 flex flex-wrap gap-3">
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" className="px-3 py-2 rounded text-sm flex-1 min-w-[200px]" style={{ background: "#0d1728", border: `1px solid ${BORDER}`, color: "#e6ecf5" }} />
-          <select value={cat} onChange={(e) => setCat(e.target.value)} className="px-3 py-2 rounded text-sm" style={{ background: "#0d1728", border: `1px solid ${BORDER}`, color: "#e6ecf5" }}>
-            {cats.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          {(assetType === "fund" || assetType === "etf") && (<>
-            <input type="number" value={minRet} onChange={(e) => setMinRet(e.target.value)} placeholder="Min 3Y ret %" className="px-3 py-2 rounded text-sm w-36" style={{ background: "#0d1728", border: `1px solid ${BORDER}`, color: "#e6ecf5" }} />
-            <input type="number" value={maxEr} onChange={(e) => setMaxEr(e.target.value)} placeholder="Max expense %" className="px-3 py-2 rounded text-sm w-36" style={{ background: "#0d1728", border: `1px solid ${BORDER}`, color: "#e6ecf5" }} />
-          </>)}
-          <div className="text-xs self-center" style={{ color: TEXT_DIM }}>{rows.length} match</div>
+
+        {/* Search + horizon */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-3">
+          <div className="space-y-2">
+            <SearchAssets selected={selected} onSelect={setSelected} />
+            {compareOn && <SearchAssets selected={selected2} onSelect={setSelected2} placeholder="Compare against…" />}
+          </div>
+          <div className="flex items-center gap-1 flex-wrap rounded-xl p-1" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+            {HORIZONS.map((h) => (
+              <button key={h} onClick={() => setHorizon(h)} className="rounded-lg px-3 py-2 text-xs font-mono"
+                style={{ background: horizon === h ? BLUE : "transparent", color: horizon === h ? "#fff" : TEXT }}>
+                {h}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="overflow-auto max-h-[60vh]">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0" style={{ background: CARD_BG }}>
-              <tr style={{ color: TEXT_DIM, borderBottom: `1px solid ${BORDER}` }} className="text-xs uppercase">
-                <th className="px-3 py-2 text-left">Name</th>
-                <th className="px-3 py-2 text-left">Category</th>
-                {assetType === "fund" && (<><th className="px-3 py-2 text-right">1Y</th><th className="px-3 py-2 text-right">3Y</th><th className="px-3 py-2 text-right">5Y</th><th className="px-3 py-2 text-right">ER</th><th className="px-3 py-2 text-right">Rating</th></>)}
-                {assetType === "etf" && (<><th className="px-3 py-2 text-right">NAV</th><th className="px-3 py-2 text-right">1Y</th><th className="px-3 py-2 text-right">3Y</th><th className="px-3 py-2 text-right">5Y</th><th className="px-3 py-2 text-right">ER</th></>)}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((u) => {
-                const f = assetType === "fund" ? findFund(u.name) : null;
-                const e = assetType === "etf" ? findEtf(u.name) : null;
-                return <tr key={u.id} onClick={() => onPick(u.id)} className="cursor-pointer hover:bg-[#0d1728]" style={{ borderBottom: `1px solid ${BORDER}` }}>
-                  <td className="px-3 py-2">{u.name}</td>
-                  <td className="px-3 py-2 text-xs" style={{ color: TEXT_DIM }}>{u.meta}</td>
-                  {f && (<>
-                    <td className="px-3 py-2 text-right" style={{ color: (f.r1 ?? 0) >= 0 ? GREEN : RED }}>{f.r1?.toFixed(2) ?? "—"}</td>
-                    <td className="px-3 py-2 text-right" style={{ color: (f.r3 ?? 0) >= 0 ? GREEN : RED }}>{f.r3?.toFixed(2) ?? "—"}</td>
-                    <td className="px-3 py-2 text-right" style={{ color: (f.r5 ?? 0) >= 0 ? GREEN : RED }}>{f.r5?.toFixed(2) ?? "—"}</td>
-                    <td className="px-3 py-2 text-right">{f.er?.toFixed(2) ?? "—"}</td>
-                    <td className="px-3 py-2 text-right" style={{ color: GOLD }}>{"★".repeat(f.rating)}</td>
-                  </>)}
-                  {e && (<>
-                    <td className="px-3 py-2 text-right">{e.nav?.toFixed(2) ?? "—"}</td>
-                    <td className="px-3 py-2 text-right" style={{ color: (e.r1 ?? 0) >= 0 ? GREEN : RED }}>{e.r1?.toFixed(2) ?? "—"}</td>
-                    <td className="px-3 py-2 text-right" style={{ color: (e.r3 ?? 0) >= 0 ? GREEN : RED }}>{e.r3?.toFixed(2) ?? "—"}</td>
-                    <td className="px-3 py-2 text-right" style={{ color: (e.r5 ?? 0) >= 0 ? GREEN : RED }}>{e.r5?.toFixed(2) ?? "—"}</td>
-                    <td className="px-3 py-2 text-right">{e.er?.toFixed(2) ?? "—"}</td>
-                  </>)}
-                </tr>;
-              })}
-            </tbody>
-          </table>
-        </div>
+
+        {watch.length > 0 && (
+          <div className="rounded-xl p-3 flex items-center gap-2 flex-wrap" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+            <span className="text-[10px] uppercase tracking-wider mr-2" style={{ color: MUTED }}>Watchlist</span>
+            {watch.map((k) => {
+              const a = UNIVERSE.find((x) => x.key === k);
+              if (!a) return null;
+              return (
+                <button key={k} onClick={() => setSelected(a)} className="rounded-md px-2 py-1 text-xs font-mono hover:bg-white/5" style={{ border: `1px solid ${BORDER}` }}>
+                  {a.symbol}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Main slots */}
+        <SlotView slot={primary} horizon={horizon} title={selected?.symbol ?? ""} />
+        {compareOn && <SlotView slot={secondary} horizon={horizon} title={selected2?.symbol ?? ""} secondary />}
+
+        {compareOn && primary.result && secondary.result && (
+          <ComparisonBanner a={selected!} ar={primary.result} b={selected2!} br={secondary.result} horizon={horizon} />
+        )}
+
+        <p className="text-xs mt-8 leading-relaxed" style={{ color: MUTED }}>
+          Forecasts are generated using statistical models applied to historical data. They are for educational and research purposes only and do not constitute investment advice. Past performance does not guarantee future results. Please consult a SEBI-registered investment advisor before making any investment decisions.
+        </p>
       </div>
     </div>
   );
 }
 
-// ============ Export CSV ============
-function ExportBar({ data, asset }: { data: ForecastResponse; asset: Asset }) {
-  const download = () => {
-    const rows: string[] = ["model,family,predicted_price,rmse,mae,mape_pct,dir_acc_pct,weight"];
-    for (const m of data.models) rows.push([m.name, m.family, m.predictedPrice, m.rmse, m.mae, m.mapePct, m.directionalAccuracyPct, m.weight].join(","));
-    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `${asset.symbol}_forecast_${data.asOf.slice(0, 10)}.csv`; a.click();
-    URL.revokeObjectURL(url);
-  };
-  return (
-    <div className="flex justify-end">
-      <button onClick={download} className="px-3 py-2 text-xs rounded flex items-center gap-2" style={{ background: "#0d1728", border: `1px solid ${BORDER}`, color: GOLD }}>
-        <Download size={14} /> Export CSV
-      </button>
-    </div>
-  );
+// ── slot state hook ──
+interface SlotState {
+  asset: Asset | null;
+  bars: CachedHist["bars"] | null;
+  meta: YahooMeta | null;
+  cached: boolean;
+  result: EngineResult | null;
+  loading: boolean;
+  error: string | null;
+  refresh: () => void;
+  isRefreshing: boolean;
 }
 
-// ============ Skeleton ============
-function SkeletonBlock() {
+function useSlot(asset: Asset | null, horizon: Horizon): SlotState {
+  const enabled = !!asset && asset.kind !== "fund" && !!asset.yahoo;
+  const query = useQuery({
+    queryKey: ["yhist", asset?.yahoo],
+    queryFn: async () => {
+      if (!asset?.yahoo) return null;
+      const r = await loadYahoo(asset.yahoo);
+      if (!r) throw new Error("Yahoo fetch failed");
+      return r;
+    },
+    enabled,
+    refetchInterval: enabled ? 30_000 : false,
+    staleTime: 25_000,
+  });
+
+  const refetchMut = useMutation({
+    mutationFn: async () => {
+      if (!asset?.yahoo) return null;
+      const r = await loadYahoo(asset.yahoo, true);
+      if (!r) throw new Error("refresh failed");
+      return r;
+    },
+    onSuccess: () => query.refetch(),
+  });
+
+  const result = useMemo(() => {
+    if (!query.data?.bars || query.data.bars.length < 40) return null;
+    return runShortTermForecast(barsToOHLCV(query.data.bars), horizon);
+  }, [query.data, horizon]);
+
+  return {
+    asset,
+    bars: query.data?.bars ?? null,
+    meta: query.data?.meta ?? null,
+    cached: query.data?.cached ?? false,
+    result,
+    loading: query.isLoading,
+    error: query.error instanceof Error ? query.error.message : null,
+    refresh: () => refetchMut.mutate(),
+    isRefreshing: refetchMut.isPending,
+  };
+}
+
+function SlotView({ slot, horizon, title, secondary }: { slot: SlotState; horizon: Horizon; title: string; secondary?: boolean }) {
+  const { asset, meta, cached, result, loading, error, refresh, isRefreshing } = slot;
+  if (!asset) return null;
+
+  // Fund path
+  if (asset.kind === "fund") {
+    const proj = projectFund(asset);
+    return (
+      <div className="rounded-xl p-5" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+        <div className="text-sm" style={{ color: MUTED }}>{asset.name}</div>
+        {!proj ? (
+          <div className="text-sm mt-2" style={{ color: AMBER }}>Insufficient historical returns for projection.</div>
+        ) : (
+          <div className="mt-3">
+            <div className="text-xs" style={{ color: MUTED }}>Implied CAGR from {proj.source}: <span className="font-mono" style={{ color: TEXT }}>{proj.cagr.toFixed(2)}%</span></div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+              {proj.years.map((y, i) => (
+                <div key={y} className="rounded-lg p-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+                  <div className="text-[10px] uppercase" style={{ color: MUTED }}>{y}Y projection</div>
+                  <div className="font-mono text-lg" style={{ color: TEXT }}>{fmtINR(proj.values[i], 2)}</div>
+                </div>
+              ))}
+            </div>
+            <div className="text-[11px] mt-3" style={{ color: MUTED }}>Starting NAV {fmtINR(asset.fundReturns?.nav ?? 100)}. Mutual fund forecasts use the fund's own historical CAGR — live NAV integration coming soon.</div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (loading) return (
+    <div className="rounded-xl p-8 flex items-center gap-3" style={{ background: CARD, border: `1px solid ${BORDER}`, color: MUTED }}>
+      <Loader2 size={16} className="animate-spin" /> Fetching live data for {asset.symbol}…
+    </div>
+  );
+  if (error) return (
+    <div className="rounded-xl p-5" style={{ background: CARD, border: `1px solid ${RED}`, color: RED }}>
+      Could not fetch live data for {asset.symbol}: {error}
+    </div>
+  );
+  if (!result || !meta) return null;
+
+  const currentPrice = meta.price ?? result.history90.at(-1)?.close ?? 0;
+
   return (
     <div className="space-y-4">
-      <div className="rounded-lg h-40 animate-pulse" style={{ background: CARD_BG }} />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2 rounded-lg h-80 animate-pulse" style={{ background: CARD_BG }} />
-        <div className="rounded-lg h-80 animate-pulse" style={{ background: CARD_BG }} />
-      </div>
-      <div className="text-center text-sm flex items-center justify-center gap-2" style={{ color: TEXT_DIM }}>
-        <Loader2 size={14} className="animate-spin" /> Running 35-model panel
+      {secondary && <div className="text-xs uppercase tracking-wider" style={{ color: MUTED }}>Comparison: {title}</div>}
+      <QuoteStrip meta={meta} asset={asset} cached={cached} onRefresh={refresh} isRefreshing={isRefreshing} />
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-4">
+        <div className="space-y-3">
+          <div className="rounded-xl p-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+              <div className="text-xs" style={{ color: MUTED }}>
+                Historical 90d + {horizon} forecast · {HORIZON_DAYS[horizon]} trading days
+              </div>
+              <div className="flex items-center gap-3 text-[11px]" style={{ color: MUTED }}>
+                <span className="inline-flex items-center gap-1"><span className="w-3 h-0.5" style={{ background: "#94a3b8" }} /> Historical</span>
+                <span className="inline-flex items-center gap-1"><span className="w-3 h-0.5" style={{ background: GREEN, borderTop: `1px dashed ${GREEN}` }} /> Forecast</span>
+                <span className="inline-flex items-center gap-1"><span className="w-3 h-2" style={{ background: "rgba(55,138,221,0.3)" }} /> 80% band</span>
+              </div>
+            </div>
+            <ForecastChart result={result} currentPrice={currentPrice} />
+          </div>
+          <MiniCharts result={result} />
+          <FactorTable result={result} />
+        </div>
+        <div className="space-y-4">
+          <SignalDashboard result={result} />
+          <DexterInsightCard asset={asset} result={result} horizon={horizon} currentPrice={currentPrice} />
+        </div>
       </div>
     </div>
   );
 }
 
-// ============ BootstrapSignalCard — static-data composite forecast ============
-function BootstrapSignalCard({ symbol, horizonDays }: { symbol: string; horizonDays: number }) {
-  const f: CompositeForecast = useMemo(() => forecastStock(symbol, horizonDays), [symbol, horizonDays]);
-  if (!f.price) return null;
-  const sigColor = f.signal === "BUY" ? GREEN : f.signal === "SELL" ? RED : AMBER;
+// ── Dexter AI insight ──
+function DexterInsightCard({ asset, result, horizon, currentPrice }: { asset: Asset; result: EngineResult; horizon: Horizon; currentPrice: number }) {
+  const [text, setText] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<number | null>(null);
+
+  async function generate() {
+    setLoading(true); setErr(null); setText("");
+    const factorLines = result.factors.map((f) => `${f.label}: ${f.detail}`);
+    try {
+      const r = await generateDexterInsight({ data: {
+        symbol: asset.symbol, name: asset.name, currentPrice,
+        horizon, compositeScore: result.compositeScore, signal: result.signal, confidence: result.confidence,
+        buyCount: result.buyCount, factorLines,
+        targetPrice: result.targetPrice, upsidePct: result.upsidePct,
+        s1: result.supportLevels.s1, r1: result.resistanceLevels.r1, atrPct: result.atrPct,
+      } });
+      if (!r.ok) setErr(r.error ?? "AI insight failed");
+      else {
+        setText(r.text);
+        setGeneratedAt(Date.now());
+      }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "unknown");
+    } finally { setLoading(false); }
+  }
+
   return (
-    <div style={{ background: CARD_BG, border: `1px solid ${BORDER}` }} className="rounded-lg p-4 md:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-xs uppercase tracking-wider" style={{ color: GOLD, letterSpacing: 2 }}>Bootstrap Signal · static dataset</div>
-          <h3 className="text-lg font-semibold mt-1">{symbol} · {horizonDays}D composite</h3>
-          <div className="text-xs mt-1" style={{ color: TEXT_DIM }}>Weighted blend of momentum, category relative strength, and 52W band mean-reversion.</div>
+    <div className="rounded-xl p-4" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Sparkles size={14} color={BLUE} />
+          <span className="text-xs uppercase tracking-wider" style={{ color: TEXT }}>Dexter Analysis</span>
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold" style={{ color: sigColor }}>{f.signal}</div>
-          <div className="text-xs" style={{ color: TEXT_DIM }}>confidence {f.confidencePct}%</div>
-        </div>
+        <button onClick={generate} disabled={loading} className="text-[11px] inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-white/5 disabled:opacity-40" style={{ border: `1px solid ${BORDER}`, color: TEXT }}>
+          {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+          {text ? "Regenerate" : "Generate"}
+        </button>
       </div>
-      <div className="grid md:grid-cols-3 gap-3 mt-4">
-        <Stat label="Last price" value={`₹${f.price?.toFixed(2)}`} />
-        <Stat label={`Target (${horizonDays}D)`} value={f.targetPrice ? `₹${f.targetPrice.toFixed(2)}` : "—"} />
-        <Stat label="Score (−1 … +1)" value={f.score.toFixed(2)} accent={sigColor} />
-      </div>
-      <div className="grid md:grid-cols-3 gap-3 mt-3">
-        {f.breakdown.map((b) => (
-          <div key={b.label} className="rounded p-3" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-            <div className="flex justify-between text-xs" style={{ color: TEXT_DIM }}><span>{b.label}</span><span>weight {(b.weight * 100).toFixed(0)}%</span></div>
-            <div className="mt-1 font-mono text-sm" style={{ color: b.score >= 0 ? GREEN : RED }}>{b.score >= 0 ? "+" : ""}{b.score.toFixed(2)}</div>
-            <div className="mt-1 text-xs" style={{ color: TEXT_DIM }}>{b.detail}</div>
-          </div>
-        ))}
-      </div>
-      {f.notes.length > 0 && (
-        <div className="mt-3 text-xs flex items-start gap-2 p-2 rounded" style={{ background: "#0d1728", color: TEXT_DIM, border: `1px dashed ${BORDER}` }}>
-          <AlertTriangle size={12} className="mt-0.5" style={{ color: AMBER }} />
-          <div>{f.notes.join(" ")}</div>
-        </div>
+      {err && <div className="text-xs mt-2" style={{ color: RED }}>{err}</div>}
+      {!text && !loading && !err && (
+        <div className="text-xs" style={{ color: MUTED }}>Click Generate for AI commentary tailored to this signal.</div>
+      )}
+      {loading && <div className="text-xs flex items-center gap-2 mt-2" style={{ color: MUTED }}><Loader2 size={12} className="animate-spin" /> Composing analysis…</div>}
+      {text && (
+        <div className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: TEXT }}>{text}</div>
+      )}
+      {generatedAt && (
+        <div className="text-[10px] mt-2" style={{ color: MUTED }}>Generated {Math.max(0, Math.floor((Date.now() - generatedAt) / 1000))}s ago</div>
       )}
     </div>
   );
 }
-function Stat({ label, value, accent }: { label: string; value: string; accent?: string }) {
+
+// ── comparison ──
+function ComparisonBanner({ a, ar, b, br, horizon }: { a: Asset; ar: EngineResult; b: Asset; br: EngineResult; horizon: Horizon }) {
+  const winner = ar.compositeScore > br.compositeScore ? { asset: a, r: ar } : { asset: b, r: br };
   return (
-    <div className="rounded p-3" style={{ background: "#0d1728", border: `1px solid ${BORDER}` }}>
-      <div className="text-xs" style={{ color: TEXT_DIM }}>{label}</div>
-      <div className="text-lg font-semibold mt-0.5" style={{ color: accent ?? "#e6ecf5" }}>{value}</div>
+    <div className="rounded-xl p-4" style={{ background: CARD, border: `1px solid ${BLUE}` }}>
+      <div className="text-xs uppercase tracking-wider mb-2" style={{ color: MUTED }}>Comparison · {horizon}</div>
+      <div className="grid grid-cols-2 gap-3">
+        {[{ asset: a, r: ar }, { asset: b, r: br }].map(({ asset, r }) => (
+          <div key={asset.key} className="rounded-lg p-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+            <div className="font-mono text-xs" style={{ color: TEXT }}>{asset.symbol}</div>
+            <div className="text-lg font-semibold" style={{ color: signalColor(r.signal) }}>{r.signal}</div>
+            <div className="text-xs font-mono mt-1" style={{ color: MUTED }}>Score {r.compositeScore >= 0 ? "+" : ""}{r.compositeScore.toFixed(3)} · Target {fmtPct(r.upsidePct)}</div>
+          </div>
+        ))}
+      </div>
+      <div className="text-sm mt-3" style={{ color: TEXT }}>
+        <span style={{ color: BLUE }}>▲</span> Best opportunity: <span className="font-semibold">{winner.asset.symbol}</span> — strongest signal ({winner.r.compositeScore >= 0 ? "+" : ""}{winner.r.compositeScore.toFixed(3)}) with {fmtPct(winner.r.upsidePct)} target over {horizon}.
+      </div>
     </div>
   );
 }
