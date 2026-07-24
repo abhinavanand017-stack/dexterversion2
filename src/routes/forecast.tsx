@@ -48,7 +48,7 @@ const UNIVERSE: Asset[] = [
   ...NIFTY500.map((s): Asset => ({ key: `stock:${s.symbol}`, symbol: `${s.symbol}.NS`, name: s.name, kind: "stock", meta: s.sector, yahoo: `${s.symbol}.NS` })),
   ...INDICES_UNIVERSE.map((i): Asset => ({ key: `index:${i.symbol}`, symbol: i.symbol, name: i.name, kind: "index", meta: i.cat, yahoo: i.symbol })),
   ...ETFS_UNIVERSE.map((e): Asset => ({ key: `etf:${e.name}`, symbol: e.name, name: e.name, kind: "etf", meta: e.cat, fundReturns: { r1: e.r1, r3: e.r3, r5: e.r5, nav: e.nav } })),
-  ...FUNDS_UNIVERSE.map((f): Asset => ({ key: `fund:${f.name}`, symbol: f.name, name: f.name, kind: "fund", meta: f.cat, fundReturns: { r1: f.r1, r3: f.r3, r5: f.r5, r10: f.r10, nav: f.nav ?? null } })),
+  ...FUNDS_UNIVERSE.map((f): Asset => ({ key: `fund:${f.name}`, symbol: f.name, name: f.name, kind: "fund", meta: f.cat, fundReturns: { r1: f.r1, r3: f.r3, r5: f.r5, r10: f.r10, nav: null } })),
 ];
 
 const POPULAR = ["stock:RELIANCE", "stock:TCS", "stock:HDFCBANK", "stock:INFY", "stock:BHARTIARTL", "stock:SBIN", "stock:BAJFINANCE", "index:^NSEI"];
