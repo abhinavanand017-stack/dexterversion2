@@ -104,7 +104,7 @@ async function loadYahoo(symbol: string, force = false): Promise<{ bars: CachedH
 }
 
 // ── Search combobox ──
-function Search Assets({ selected, onSelect, placeholder = "Search stocks, indices, ETFs, mutual funds..." }: { selected: Asset | null; onSelect: (a: Asset | null) => void; placeholder?: string }) {
+function SearchAssets({ selected, onSelect, placeholder = "Search stocks, indices, ETFs, mutual funds..." }: { selected: Asset | null; onSelect: (a: Asset | null) => void; placeholder?: string }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
