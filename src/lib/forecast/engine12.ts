@@ -93,7 +93,15 @@ export function calcOBV(c: number[], v: number[]) {
 }
 
 // ─── 12-factor engine ────────────────────────────────────────────────────
-export interface Factor { key: string; label: string; score: number; detail: string; signal: "BUY" | "SELL" | "HOLD" }
+export interface Factor {
+  key: string; label: string; score: number; detail: string; signal: "BUY" | "SELL" | "HOLD";
+  /** normalised weight actually applied in this run (0 when the model is deselected) */
+  weight?: number;
+  /** score × weight — this factor's contribution to the composite */
+  contribution?: number;
+  /** whether the user has this model selected */
+  enabled?: boolean;
+}
 export interface ForecastPoint { date: string; price: number; upper: number; lower: number }
 export interface EngineResult {
   signal: "STRONG BUY" | "BUY" | "HOLD" | "SELL" | "STRONG SELL";
@@ -114,15 +122,37 @@ export interface EngineResult {
   history90: { date: string; close: number; volume: number }[];
   rsi90: { date: string; rsi: number }[];
   macd90: { date: string; hist: number; signal: number }[];
+  /** keys of the models actually included in this run */
+  activeKeys: string[];
 }
 
-const WEIGHTS = {
+export const WEIGHTS = {
   rsi: 0.10, macd: 0.12, bollinger: 0.08, maAlignment: 0.15,
   volume: 0.10, stochastic: 0.08, momentum: 0.12, cci: 0.07,
   obv: 0.08, williamsR: 0.05, volatility: 0.05, supportResistance: 0.10,
 };
 
-export function runShortTermForecast(bars: OHLCV[], horizon: Horizon): EngineResult {
+export type FactorKey = keyof typeof WEIGHTS;
+
+/** Canonical registry of every model/technical factor in the engine. */
+export const FACTOR_REGISTRY: { key: FactorKey; label: string; weight: number; description: string }[] = [
+  { key: "maAlignment", label: "MA Alignment", weight: WEIGHTS.maAlignment, description: "Price vs EMA9 / EMA21 / MA20 / MA50 trend stack, golden & death crosses" },
+  { key: "macd", label: "MACD", weight: WEIGHTS.macd, description: "12/26 EMA convergence-divergence with 9-period signal line" },
+  { key: "momentum", label: "Momentum", weight: WEIGHTS.momentum, description: "Blended 5D / 10D / 20D rate of change" },
+  { key: "rsi", label: "RSI", weight: WEIGHTS.rsi, description: "14-period Relative Strength Index (overbought / oversold)" },
+  { key: "volume", label: "Volume", weight: WEIGHTS.volume, description: "Latest volume vs 20-day average, direction-confirmed" },
+  { key: "supportResistance", label: "S/R Position", weight: WEIGHTS.supportResistance, description: "Distance to classic pivot support (S1) and resistance (R1)" },
+  { key: "bollinger", label: "Bollinger Bands", weight: WEIGHTS.bollinger, description: "20-period bands, %B mean-reversion position" },
+  { key: "stochastic", label: "Stochastic Oscillator", weight: WEIGHTS.stochastic, description: "14-period %K oscillator" },
+  { key: "obv", label: "OBV", weight: WEIGHTS.obv, description: "On-Balance Volume accumulation / distribution and divergence" },
+  { key: "cci", label: "CCI", weight: WEIGHTS.cci, description: "20-period Commodity Channel Index" },
+  { key: "williamsR", label: "Williams %R", weight: WEIGHTS.williamsR, description: "14-period Williams %R momentum extreme" },
+  { key: "volatility", label: "Volatility (ATR)", weight: WEIGHTS.volatility, description: "14-period Average True Range as % of price — forecast band width" },
+];
+
+export const ALL_FACTOR_KEYS: FactorKey[] = FACTOR_REGISTRY.map((f) => f.key);
+
+export function runShortTermForecast(bars: OHLCV[], horizon: Horizon, enabledKeys?: string[]): EngineResult {
   const closes = bars.map((b) => b.close);
   const highs = bars.map((b) => b.high);
   const lows = bars.map((b) => b.low);
@@ -277,19 +307,37 @@ export function runShortTermForecast(bars: OHLCV[], horizon: Horizon): EngineRes
     return { key: "supportResistance", label: "S/R Position", score: 0, detail: `Pivot ₹${pivot.toFixed(0)} · R1 ₹${r1.toFixed(0)} · S1 ₹${s1.toFixed(0)}`, signal: "HOLD" as const };
   })());
 
-  // composite
+  // composite — only the selected models contribute; weights are renormalised
+  // across the active subset so the score stays on the same -1..1 scale.
+  const active = new Set<string>(
+    enabledKeys && enabledKeys.length ? enabledKeys : ALL_FACTOR_KEYS,
+  );
+  const activeWeightSum = factors
+    .filter((f) => active.has(f.key))
+    .reduce((s, f) => s + (WEIGHTS[f.key as FactorKey] ?? 0), 0) || 1;
+
   let composite = 0;
-  for (const f of factors) composite += f.score * (WEIGHTS[f.key as keyof typeof WEIGHTS] ?? 0);
+  for (const f of factors) {
+    const on = active.has(f.key);
+    const w = on ? (WEIGHTS[f.key as FactorKey] ?? 0) / activeWeightSum : 0;
+    f.enabled = on;
+    f.weight = w;
+    f.contribution = f.score * w;
+    composite += f.contribution;
+  }
+
   const signal: EngineResult["signal"] =
     composite > 0.35 ? "STRONG BUY" :
     composite > 0.15 ? "BUY" :
     composite > -0.15 ? "HOLD" :
     composite > -0.35 ? "SELL" : "STRONG SELL";
 
-  const buyCount = factors.filter((f) => f.signal === "BUY").length;
-  const sellCount = factors.filter((f) => f.signal === "SELL").length;
-  const holdCount = factors.filter((f) => f.signal === "HOLD").length;
-  const confidence = (Math.max(buyCount, sellCount) / 12) * 100;
+  const activeFactors = factors.filter((f) => f.enabled);
+  const denom = activeFactors.length || 1;
+  const buyCount = activeFactors.filter((f) => f.signal === "BUY").length;
+  const sellCount = activeFactors.filter((f) => f.signal === "SELL").length;
+  const holdCount = activeFactors.filter((f) => f.signal === "HOLD").length;
+  const confidence = (Math.max(buyCount, sellCount) / denom) * 100;
 
   // ── forecast path (signal-adjusted GBM) ──
   const days = HORIZON_DAYS[horizon];
@@ -348,6 +396,7 @@ export function runShortTermForecast(bars: OHLCV[], horizon: Horizon): EngineRes
     rsi, macd, bollinger: bb,
     ma: { ma20, ma50, ma200, ema9, ema21 },
     forecastPath, history90, rsi90, macd90,
+    activeKeys: activeFactors.map((f) => f.key),
   };
 }
 
