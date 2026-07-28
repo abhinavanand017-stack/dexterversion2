@@ -77,3 +77,52 @@ Rules: under 160 words. Speak directly ("you", "your portfolio"). Reference spec
       return { ok: false, text: "", error: e instanceof Error ? e.message : "unknown" };
     }
   });
+
+export interface FundamentalSummaryInput {
+  symbol: string;
+  name: string;
+  sector: string;
+  metricLines: string[]; // "P/E: 24.3", "ROE: 18.2%" …
+}
+
+/** One-to-two sentence fundamental commentary in the Dexter voice. */
+export const generateFundamentalSummary = createServerFn({ method: "POST" })
+  .inputValidator((i: FundamentalSummaryInput) => i)
+  .handler(async ({ data }): Promise<{ ok: boolean; text: string; error?: string }> => {
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) return { ok: false, text: "", error: "LOVABLE_API_KEY not configured" };
+
+    const prompt = `You are Dexter, a bio-algorithmic trading AI for Indian markets (NSE/BSE).
+
+Asset: ${data.name} (${data.symbol})
+Sector: ${data.sector || "Unknown"}
+
+Fundamental metrics:
+${data.metricLines.map((l) => `- ${l}`).join("\n")}
+
+Write exactly 2 sentences of fundamental commentary. Reference the specific numbers given (e.g. "Trading at 24x earnings versus a sector norm nearer 20x, ROE of 18% signals..."). Ignore metrics marked N/A. No disclaimers, no bullet points, under 60 words.`;
+
+    try {
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Lovable-API-Key": key,
+          "X-Lovable-AIG-SDK": "raw-fetch",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [{ role: "user", content: prompt }],
+        }),
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        return { ok: false, text: "", error: `AI ${res.status}: ${t.slice(0, 120)}` };
+      }
+      const json = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
+      const text = json.choices?.[0]?.message?.content?.trim() ?? "";
+      return { ok: text.length > 0, text };
+    } catch (e) {
+      return { ok: false, text: "", error: e instanceof Error ? e.message : "unknown" };
+    }
+  });
