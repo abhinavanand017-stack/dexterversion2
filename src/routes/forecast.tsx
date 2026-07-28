@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Loader2, TrendingUp, TrendingDown, X, Star, StarOff, GitCompare, Sparkles, RefreshCw } from "lucide-react";
+import { Search, Loader2, TrendingUp, TrendingDown, X, Star, StarOff, GitCompare, Sparkles, RefreshCw, ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-react";
 import {
   ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
   LineChart,
