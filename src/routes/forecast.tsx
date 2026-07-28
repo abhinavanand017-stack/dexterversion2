@@ -888,6 +888,7 @@ function FundamentalsPanel({ asset, meta }: { asset: Asset; meta: YahooMeta | nu
 
 function SlotView({ slot, horizon, title, secondary }: { slot: SlotState; horizon: Horizon; title: string; secondary?: boolean }) {
   const { asset, meta, cached, result, loading, error, refresh, isRefreshing } = slot;
+  const [tab, setTab] = useState<"technical" | "fundamentals">("technical");
   if (!asset) return null;
 
   // Fund path
