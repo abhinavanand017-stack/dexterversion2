@@ -307,19 +307,37 @@ export function runShortTermForecast(bars: OHLCV[], horizon: Horizon, enabledKey
     return { key: "supportResistance", label: "S/R Position", score: 0, detail: `Pivot ₹${pivot.toFixed(0)} · R1 ₹${r1.toFixed(0)} · S1 ₹${s1.toFixed(0)}`, signal: "HOLD" as const };
   })());
 
-  // composite
+  // composite — only the selected models contribute; weights are renormalised
+  // across the active subset so the score stays on the same -1..1 scale.
+  const active = new Set<string>(
+    enabledKeys && enabledKeys.length ? enabledKeys : ALL_FACTOR_KEYS,
+  );
+  const activeWeightSum = factors
+    .filter((f) => active.has(f.key))
+    .reduce((s, f) => s + (WEIGHTS[f.key as FactorKey] ?? 0), 0) || 1;
+
   let composite = 0;
-  for (const f of factors) composite += f.score * (WEIGHTS[f.key as keyof typeof WEIGHTS] ?? 0);
+  for (const f of factors) {
+    const on = active.has(f.key);
+    const w = on ? (WEIGHTS[f.key as FactorKey] ?? 0) / activeWeightSum : 0;
+    f.enabled = on;
+    f.weight = w;
+    f.contribution = f.score * w;
+    composite += f.contribution;
+  }
+
   const signal: EngineResult["signal"] =
     composite > 0.35 ? "STRONG BUY" :
     composite > 0.15 ? "BUY" :
     composite > -0.15 ? "HOLD" :
     composite > -0.35 ? "SELL" : "STRONG SELL";
 
-  const buyCount = factors.filter((f) => f.signal === "BUY").length;
-  const sellCount = factors.filter((f) => f.signal === "SELL").length;
-  const holdCount = factors.filter((f) => f.signal === "HOLD").length;
-  const confidence = (Math.max(buyCount, sellCount) / 12) * 100;
+  const activeFactors = factors.filter((f) => f.enabled);
+  const denom = activeFactors.length || 1;
+  const buyCount = activeFactors.filter((f) => f.signal === "BUY").length;
+  const sellCount = activeFactors.filter((f) => f.signal === "SELL").length;
+  const holdCount = activeFactors.filter((f) => f.signal === "HOLD").length;
+  const confidence = (Math.max(buyCount, sellCount) / denom) * 100;
 
   // ── forecast path (signal-adjusted GBM) ──
   const days = HORIZON_DAYS[horizon];
