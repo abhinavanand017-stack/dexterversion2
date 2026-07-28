@@ -93,7 +93,15 @@ export function calcOBV(c: number[], v: number[]) {
 }
 
 // ─── 12-factor engine ────────────────────────────────────────────────────
-export interface Factor { key: string; label: string; score: number; detail: string; signal: "BUY" | "SELL" | "HOLD" }
+export interface Factor {
+  key: string; label: string; score: number; detail: string; signal: "BUY" | "SELL" | "HOLD";
+  /** normalised weight actually applied in this run (0 when the model is deselected) */
+  weight?: number;
+  /** score × weight — this factor's contribution to the composite */
+  contribution?: number;
+  /** whether the user has this model selected */
+  enabled?: boolean;
+}
 export interface ForecastPoint { date: string; price: number; upper: number; lower: number }
 export interface EngineResult {
   signal: "STRONG BUY" | "BUY" | "HOLD" | "SELL" | "STRONG SELL";
