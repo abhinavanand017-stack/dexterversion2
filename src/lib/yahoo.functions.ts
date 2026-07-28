@@ -348,3 +348,97 @@ export const fetchYahooChart = createServerFn({ method: "GET" })
     }
   });
 
+
+// ─── Fundamentals ────────────────────────────────────────────────────────
+export interface YahooFundamentals {
+  peTrailing: number | null;
+  peForward: number | null;
+  pb: number | null;
+  eps: number | null;
+  marketCap: number | null;
+  dividendYieldPct: number | null;
+  debtToEquity: number | null;
+  roePct: number | null;
+  roaPct: number | null;
+  revenueGrowthPct: number | null;
+  earningsGrowthPct: number | null;
+  profitMarginPct: number | null;
+  operatingMarginPct: number | null;
+  w52High: number | null;
+  w52Low: number | null;
+  beta: number | null;
+  sector: string | null;
+  industry: string | null;
+}
+
+const EMPTY_FUNDAMENTALS: YahooFundamentals = {
+  peTrailing: null, peForward: null, pb: null, eps: null, marketCap: null,
+  dividendYieldPct: null, debtToEquity: null, roePct: null, roaPct: null,
+  revenueGrowthPct: null, earningsGrowthPct: null, profitMarginPct: null,
+  operatingMarginPct: null, w52High: null, w52Low: null, beta: null,
+  sector: null, industry: null,
+};
+
+type YRaw = { raw?: number } | number | null | undefined;
+const num = (v: YRaw): number | null => {
+  if (v == null) return null;
+  const n = typeof v === "number" ? v : v.raw;
+  return typeof n === "number" && Number.isFinite(n) ? n : null;
+};
+const pct = (v: YRaw): number | null => {
+  const n = num(v);
+  return n == null ? null : n * 100;
+};
+
+/** Fundamental metrics for a Yahoo symbol. Returns nulls (never throws) when unavailable. */
+export const fetchYahooFundamentals = createServerFn({ method: "GET" })
+  .inputValidator((input: { symbol: string }) => ({ symbol: String(input.symbol || "").slice(0, 32) }))
+  .handler(async ({ data }): Promise<{ ok: boolean; data: YahooFundamentals; error?: string }> => {
+    const modules = [
+      "summaryDetail", "defaultKeyStatistics", "financialData", "assetProfile", "price",
+    ].join("%2C");
+    const urls = [
+      `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(data.symbol)}?modules=${modules}`,
+      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(data.symbol)}?modules=${modules}`,
+    ];
+    for (const url of urls) {
+      try {
+        const res = await withTimeout(fetch(url, { headers: BROWSER_HEADERS }), 6000);
+        if (!res.ok) continue;
+        const json = await res.json() as {
+          quoteSummary?: { result?: Array<Record<string, Record<string, unknown>>> };
+        };
+        const r = json.quoteSummary?.result?.[0];
+        if (!r) continue;
+        const sd = (r.summaryDetail ?? {}) as Record<string, YRaw & string>;
+        const ks = (r.defaultKeyStatistics ?? {}) as Record<string, YRaw & string>;
+        const fd = (r.financialData ?? {}) as Record<string, YRaw & string>;
+        const ap = (r.assetProfile ?? {}) as Record<string, unknown>;
+        const pr = (r.price ?? {}) as Record<string, YRaw & string>;
+        const out: YahooFundamentals = {
+          peTrailing: num(sd.trailingPE),
+          peForward: num(sd.forwardPE) ?? num(ks.forwardPE),
+          pb: num(ks.priceToBook),
+          eps: num(ks.trailingEps),
+          marketCap: num(sd.marketCap) ?? num(pr.marketCap),
+          dividendYieldPct: pct(sd.dividendYield) ?? pct(sd.trailingAnnualDividendYield),
+          debtToEquity: num(fd.debtToEquity),
+          roePct: pct(fd.returnOnEquity),
+          roaPct: pct(fd.returnOnAssets),
+          revenueGrowthPct: pct(fd.revenueGrowth),
+          earningsGrowthPct: pct(fd.earningsGrowth),
+          profitMarginPct: pct(fd.profitMargins) ?? pct(ks.profitMargins),
+          operatingMarginPct: pct(fd.operatingMargins),
+          w52High: num(sd.fiftyTwoWeekHigh),
+          w52Low: num(sd.fiftyTwoWeekLow),
+          beta: num(sd.beta) ?? num(ks.beta),
+          sector: typeof ap.sector === "string" ? ap.sector : null,
+          industry: typeof ap.industry === "string" ? ap.industry : null,
+        };
+        return { ok: true, data: out };
+      } catch {
+        // try next host
+      }
+    }
+    return { ok: false, data: EMPTY_FUNDAMENTALS, error: "fundamentals unavailable" };
+  });
