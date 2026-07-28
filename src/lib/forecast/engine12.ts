@@ -396,6 +396,7 @@ export function runShortTermForecast(bars: OHLCV[], horizon: Horizon, enabledKey
     rsi, macd, bollinger: bb,
     ma: { ma20, ma50, ma200, ema9, ema21 },
     forecastPath, history90, rsi90, macd90,
+    activeKeys: activeFactors.map((f) => f.key),
   };
 }
 
