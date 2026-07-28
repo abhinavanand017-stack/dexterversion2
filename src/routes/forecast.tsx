@@ -7,8 +7,7 @@ import {
   LineChart,
 } from "recharts";
 import { fetchYahooChart, fetchYahooFundamentals, type YahooFundamentals } from "@/lib/yahoo.functions";
-import { generateDexterInsight } from "@/lib/forecast/insight.functions";
-import { generateFundamentalSummary } from "@/lib/forecast/insight.functions";
+import { generateDexterInsight, generateFundamentalSummary } from "@/lib/forecast/insight.functions";
 import { runShortTermForecast, barsToOHLCV, HORIZON_DAYS, FACTOR_REGISTRY, ALL_FACTOR_KEYS, type Horizon, type EngineResult } from "@/lib/forecast/engine12";
 import { NIFTY500 } from "@/lib/nifty500";
 import { INDICES_UNIVERSE } from "@/lib/forecast/indices";
