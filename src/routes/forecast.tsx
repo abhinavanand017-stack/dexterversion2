@@ -6,9 +6,10 @@ import {
   ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
   LineChart,
 } from "recharts";
-import { fetchYahooChart } from "@/lib/yahoo.functions";
+import { fetchYahooChart, fetchYahooFundamentals, type YahooFundamentals } from "@/lib/yahoo.functions";
 import { generateDexterInsight } from "@/lib/forecast/insight.functions";
-import { runShortTermForecast, barsToOHLCV, HORIZON_DAYS, type Horizon, type EngineResult } from "@/lib/forecast/engine12";
+import { generateFundamentalSummary } from "@/lib/forecast/insight.functions";
+import { runShortTermForecast, barsToOHLCV, HORIZON_DAYS, FACTOR_REGISTRY, ALL_FACTOR_KEYS, type Horizon, type EngineResult } from "@/lib/forecast/engine12";
 import { NIFTY500 } from "@/lib/nifty500";
 import { INDICES_UNIVERSE } from "@/lib/forecast/indices";
 import { ETFS_UNIVERSE } from "@/lib/forecast/etfs";
