@@ -584,6 +584,14 @@ interface SlotState {
   error: string | null;
   refresh: () => void;
   isRefreshing: boolean;
+  // model selection (session-local component state)
+  draftKeys: string[];
+  appliedKeys: string[];
+  toggleModel: (k: string) => void;
+  selectAllModels: () => void;
+  clearModels: () => void;
+  applyModels: () => void;
+  modelsDirty: boolean;
 }
 
 function useSlot(asset: Asset | null, horizon: Horizon): SlotState {
@@ -611,10 +619,16 @@ function useSlot(asset: Asset | null, horizon: Horizon): SlotState {
     onSuccess: () => query.refetch(),
   });
 
+  const [draftKeys, setDraftKeys] = useState<string[]>(() => [...ALL_FACTOR_KEYS]);
+  const [appliedKeys, setAppliedKeys] = useState<string[]>(() => [...ALL_FACTOR_KEYS]);
+
   const result = useMemo(() => {
     if (!query.data?.bars || query.data.bars.length < 40) return null;
-    return runShortTermForecast(barsToOHLCV(query.data.bars), horizon);
-  }, [query.data, horizon]);
+    return runShortTermForecast(barsToOHLCV(query.data.bars), horizon, appliedKeys);
+  }, [query.data, horizon, appliedKeys]);
+
+  const modelsDirty =
+    draftKeys.length !== appliedKeys.length || draftKeys.some((k) => !appliedKeys.includes(k));
 
   return {
     asset,
@@ -626,8 +640,251 @@ function useSlot(asset: Asset | null, horizon: Horizon): SlotState {
     error: query.error instanceof Error ? query.error.message : null,
     refresh: () => refetchMut.mutate(),
     isRefreshing: refetchMut.isPending,
+    draftKeys,
+    appliedKeys,
+    toggleModel: (k) => setDraftKeys((cur) => (cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k])),
+    selectAllModels: () => setDraftKeys([...ALL_FACTOR_KEYS]),
+    clearModels: () => setDraftKeys([]),
+    applyModels: () => setAppliedKeys(draftKeys.length ? [...draftKeys] : [...ALL_FACTOR_KEYS]),
+    modelsDirty,
   };
 }
+
+// ── Models used in this forecast ──
+function ModelsPanel({ slot, result }: { slot: SlotState; result: EngineResult }) {
+  const [open, setOpen] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const byKey = useMemo(() => Object.fromEntries(result.factors.map((f) => [f.key, f])), [result]);
+  const noneSelected = slot.draftKeys.length === 0;
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-3 py-2.5 flex items-center justify-between gap-2"
+        style={{ borderBottom: open ? `1px solid ${BORDER}` : "none" }}
+      >
+        <span className="flex items-center gap-2">
+          <SlidersHorizontal size={13} color={BLUE} />
+          <span className="text-xs uppercase tracking-wider" style={{ color: TEXT }}>Models Used in This Forecast</span>
+          <span className="text-[10px] font-mono" style={{ color: MUTED }}>
+            {slot.appliedKeys.length}/{FACTOR_REGISTRY.length} active
+          </span>
+        </span>
+        {open ? <ChevronDown size={14} color={MUTED} /> : <ChevronRight size={14} color={MUTED} />}
+      </button>
+
+      {open && (
+        <div className="p-3 space-y-3">
+          {/* Select models */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] uppercase tracking-wider mr-1" style={{ color: MUTED }}>Select models</span>
+            <button onClick={slot.selectAllModels} className="rounded-md px-2 py-1 text-[11px] hover:bg-white/5" style={{ border: `1px solid ${BORDER}`, color: TEXT }}>All</button>
+            <button onClick={slot.clearModels} className="rounded-md px-2 py-1 text-[11px] hover:bg-white/5" style={{ border: `1px solid ${BORDER}`, color: TEXT }}>None</button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {FACTOR_REGISTRY.map((m) => {
+              const on = slot.draftKeys.includes(m.key);
+              const f = byKey[m.key];
+              const tint = !on ? MUTED : f && f.score > 0.15 ? GREEN : f && f.score < -0.15 ? RED : AMBER;
+              return (
+                <button
+                  key={m.key}
+                  onClick={() => slot.toggleModel(m.key)}
+                  title={m.description}
+                  className="rounded-full px-2.5 py-1 text-[11px] inline-flex items-center gap-1.5 transition-colors"
+                  style={{
+                    border: `1px solid ${on ? tint : BORDER}`,
+                    background: on ? `${tint}1a` : "transparent",
+                    color: on ? TEXT : MUTED,
+                    opacity: on ? 1 : 0.6,
+                  }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: on ? tint : "rgba(255,255,255,0.2)" }} />
+                  {m.label}
+                  <span className="font-mono" style={{ color: MUTED }}>{(m.weight * 100).toFixed(0)}%</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={slot.applyModels}
+              disabled={!slot.modelsDirty || noneSelected}
+              className="rounded-lg px-3 py-2 text-xs font-medium inline-flex items-center gap-2 disabled:opacity-40"
+              style={{ background: slot.modelsDirty && !noneSelected ? BLUE : CARD, border: `1px solid ${BORDER}`, color: TEXT }}
+            >
+              <RefreshCw size={12} /> Recalculate Forecast
+            </button>
+            {noneSelected && <span className="text-[11px]" style={{ color: AMBER }}>Select at least one model.</span>}
+            {slot.modelsDirty && !noneSelected && <span className="text-[11px]" style={{ color: AMBER }}>Selection changed — recalculate to apply.</span>}
+          </div>
+
+          {/* Breakdown table */}
+          <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
+            <div className="px-3 py-2 grid grid-cols-[1fr_74px_64px_72px] gap-2 text-[10px] uppercase tracking-wider" style={{ color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
+              <span>Model</span><span className="text-right">Signal</span><span className="text-right">Weight</span><span className="text-right">Contrib.</span>
+            </div>
+            {FACTOR_REGISTRY.map((m) => {
+              const f = byKey[m.key];
+              if (!f) return null;
+              const active = result.activeKeys.includes(m.key);
+              const bias = f.signal === "BUY" ? "Bullish" : f.signal === "SELL" ? "Bearish" : "Neutral";
+              const tint = f.signal === "BUY" ? GREEN : f.signal === "SELL" ? RED : AMBER;
+              const isOpen = expanded === m.key;
+              return (
+                <div key={m.key} style={{ borderBottom: `1px solid ${BORDER}`, opacity: active ? 1 : 0.4 }}>
+                  <button
+                    onClick={() => setExpanded(isOpen ? null : m.key)}
+                    className="w-full px-3 py-2 grid grid-cols-[1fr_74px_64px_72px] gap-2 items-center text-left hover:bg-white/5"
+                  >
+                    <span className="text-xs flex items-center gap-1.5 truncate" style={{ color: TEXT }}>
+                      {isOpen ? <ChevronDown size={11} color={MUTED} /> : <ChevronRight size={11} color={MUTED} />}
+                      {m.label}
+                    </span>
+                    <span className="text-[11px] text-right" style={{ color: active ? tint : MUTED }}>{active ? bias : "Excluded"}</span>
+                    <span className="font-mono text-[11px] text-right" style={{ color: MUTED }}>{((f.weight ?? 0) * 100).toFixed(1)}%</span>
+                    <span className="font-mono text-[11px] text-right" style={{ color: active ? tint : MUTED }}>
+                      {(f.contribution ?? 0) >= 0 ? "+" : ""}{(f.contribution ?? 0).toFixed(3)}
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className="px-3 pb-2 pl-8 text-[11px] space-y-1" style={{ color: MUTED }}>
+                      <div>{f.detail}</div>
+                      <div>{m.description}</div>
+                      <div className="font-mono">
+                        raw score {f.score >= 0 ? "+" : ""}{f.score.toFixed(2)} × weight {((f.weight ?? 0) * 100).toFixed(1)}% = {(f.contribution ?? 0) >= 0 ? "+" : ""}{(f.contribution ?? 0).toFixed(3)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <div className="px-3 py-2 grid grid-cols-[1fr_74px_64px_72px] gap-2 text-xs" style={{ color: TEXT }}>
+              <span className="uppercase tracking-wider text-[10px]" style={{ color: MUTED }}>Composite</span>
+              <span />
+              <span className="font-mono text-[11px] text-right" style={{ color: MUTED }}>100%</span>
+              <span className="font-mono text-right" style={{ color: signalColor(result.signal) }}>
+                {result.compositeScore >= 0 ? "+" : ""}{result.compositeScore.toFixed(3)}
+              </span>
+            </div>
+          </div>
+          <p className="text-[10px]" style={{ color: MUTED }}>
+            Weights are renormalised across the selected models, so the composite score stays on the same scale.
+            Selection applies to this session only.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Fundamentals ──
+function fmtCr(n: number | null): string {
+  if (n == null || !Number.isFinite(n)) return "N/A";
+  if (n >= 1e7) return "₹" + (n / 1e7).toLocaleString("en-IN", { maximumFractionDigits: 2 }) + " Cr";
+  return "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
+}
+function fmtNum(n: number | null | undefined, suffix = "", digits = 2): string {
+  if (n == null || !Number.isFinite(n)) return "N/A";
+  return n.toFixed(digits) + suffix;
+}
+
+function FundamentalsPanel({ asset, meta }: { asset: Asset; meta: YahooMeta | null }) {
+  const seed = useMemo(
+    () => NIFTY500.find((s) => `${s.symbol}.NS` === asset.yahoo || s.symbol === asset.symbol) ?? null,
+    [asset],
+  );
+
+  const q = useQuery({
+    queryKey: ["yfund", asset.yahoo],
+    queryFn: async (): Promise<YahooFundamentals | null> => {
+      if (!asset.yahoo) return null;
+      const r = await fetchYahooFundamentals({ data: { symbol: asset.yahoo } });
+      return r.data;
+    },
+    enabled: !!asset.yahoo,
+    staleTime: 15 * 60_000,
+  });
+
+  const f = q.data ?? null;
+  const marketCapCr = f?.marketCap != null ? f.marketCap : seed?.marCap != null ? seed.marCap * 1e7 : null;
+
+  const rows: { label: string; value: string }[] = [
+    { label: "P/E Ratio (TTM)", value: fmtNum(f?.peTrailing ?? seed?.pe ?? null) },
+    { label: "P/B Ratio", value: fmtNum(f?.pb ?? null) },
+    { label: "EPS (TTM)", value: f?.eps != null ? fmtINR(f.eps) : "N/A" },
+    { label: "Market Cap", value: fmtCr(marketCapCr) },
+    { label: "Dividend Yield", value: fmtNum(f?.dividendYieldPct ?? seed?.divYld ?? null, "%") },
+    { label: "Debt / Equity", value: fmtNum(f?.debtToEquity ?? seed?.debtEquity ?? null) },
+    { label: "ROE", value: fmtNum(f?.roePct ?? null, "%") },
+    { label: "ROCE", value: fmtNum(seed?.roce ?? null, "%") },
+    { label: "Revenue growth (YoY)", value: fmtNum(f?.revenueGrowthPct ?? seed?.qtrSalesVar ?? null, "%") },
+    { label: "Profit margin", value: fmtNum(f?.profitMarginPct ?? null, "%") },
+    { label: "52-week high", value: f?.w52High != null ? fmtINR(f.w52High) : meta?.w52High != null ? fmtINR(meta.w52High) : "N/A" },
+    { label: "52-week low", value: f?.w52Low != null ? fmtINR(f.w52Low) : meta?.w52Low != null ? fmtINR(meta.w52Low) : "N/A" },
+  ];
+
+  const [summary, setSummary] = useState("");
+  const [sumLoading, setSumLoading] = useState(false);
+  const [sumErr, setSumErr] = useState<string | null>(null);
+
+  async function genSummary() {
+    setSumLoading(true); setSumErr(null); setSummary("");
+    try {
+      const r = await generateFundamentalSummary({ data: {
+        symbol: asset.symbol,
+        name: asset.name,
+        sector: f?.sector ?? seed?.sector ?? asset.meta ?? "",
+        metricLines: rows.map((x) => `${x.label}: ${x.value}`),
+      } });
+      if (!r.ok) setSumErr(r.error ?? "Summary unavailable");
+      else setSummary(r.text);
+    } catch (e) {
+      setSumErr(e instanceof Error ? e.message : "unknown");
+    } finally { setSumLoading(false); }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl p-4" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+        <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+          <span className="text-xs uppercase tracking-wider" style={{ color: TEXT }}>Fundamentals · {asset.symbol}</span>
+          <span className="text-[10px]" style={{ color: MUTED }}>
+            {q.isLoading ? "Loading…" : q.data ? (f?.industry ?? f?.sector ?? seed?.sector ?? "") : "Live fundamentals unavailable — showing bundled snapshot"}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-3">
+          {rows.map((r) => (
+            <div key={r.label}>
+              <div className="text-[10px] uppercase tracking-wider" style={{ color: MUTED }}>{r.label}</div>
+              <div className="font-mono text-sm" style={{ color: r.value === "N/A" ? MUTED : TEXT }}>{r.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-xl p-4" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+        <div className="flex items-center justify-between mb-2 gap-2">
+          <div className="flex items-center gap-2">
+            <Sparkles size={14} color={BLUE} />
+            <span className="text-xs uppercase tracking-wider" style={{ color: TEXT }}>Fundamental Summary</span>
+          </div>
+          <button onClick={genSummary} disabled={sumLoading} className="text-[11px] inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-white/5 disabled:opacity-40" style={{ border: `1px solid ${BORDER}`, color: TEXT }}>
+            {sumLoading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            {summary ? "Regenerate" : "Generate"}
+          </button>
+        </div>
+        {sumErr && <div className="text-xs" style={{ color: RED }}>{sumErr}</div>}
+        {!summary && !sumLoading && !sumErr && <div className="text-xs" style={{ color: MUTED }}>Click Generate for a Dexter read on these fundamentals.</div>}
+        {summary && <div className="text-sm leading-relaxed" style={{ color: TEXT }}>{summary}</div>}
+      </div>
+    </div>
+  );
+}
+
 
 function SlotView({ slot, horizon, title, secondary }: { slot: SlotState; horizon: Horizon; title: string; secondary?: boolean }) {
   const { asset, meta, cached, result, loading, error, refresh, isRefreshing } = slot;
