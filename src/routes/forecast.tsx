@@ -936,21 +936,45 @@ function SlotView({ slot, horizon, title, secondary }: { slot: SlotState; horizo
       <QuoteStrip meta={meta} asset={asset} cached={cached} onRefresh={refresh} isRefreshing={isRefreshing} />
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-4">
         <div className="space-y-3">
-          <div className="rounded-xl p-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
-            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-              <div className="text-xs" style={{ color: MUTED }}>
-                Historical 90d + {horizon} forecast · {HORIZON_DAYS[horizon]} trading days
-              </div>
-              <div className="flex items-center gap-3 text-[11px]" style={{ color: MUTED }}>
-                <span className="inline-flex items-center gap-1"><span className="w-3 h-0.5" style={{ background: "#94a3b8" }} /> Historical</span>
-                <span className="inline-flex items-center gap-1"><span className="w-3 h-0.5" style={{ background: GREEN, borderTop: `1px dashed ${GREEN}` }} /> Forecast</span>
-                <span className="inline-flex items-center gap-1"><span className="w-3 h-2" style={{ background: "rgba(55,138,221,0.3)" }} /> 80% band</span>
-              </div>
-            </div>
-            <ForecastChart result={result} currentPrice={currentPrice} />
+          <div className="flex gap-1">
+            {(["technical", "fundamentals"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className="rounded-lg px-3 py-1.5 text-xs capitalize"
+                style={{
+                  border: `1px solid ${tab === t ? BLUE : BORDER}`,
+                  background: tab === t ? "rgba(55,138,221,0.15)" : "transparent",
+                  color: tab === t ? TEXT : MUTED,
+                }}
+              >
+                {t === "technical" ? "Technical Forecast" : "Fundamentals"}
+              </button>
+            ))}
           </div>
-          <MiniCharts result={result} />
-          <FactorTable result={result} />
+
+          {tab === "technical" ? (
+            <>
+              <div className="rounded-xl p-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                  <div className="text-xs" style={{ color: MUTED }}>
+                    Historical 90d + {horizon} forecast · {HORIZON_DAYS[horizon]} trading days
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px]" style={{ color: MUTED }}>
+                    <span className="inline-flex items-center gap-1"><span className="w-3 h-0.5" style={{ background: "#94a3b8" }} /> Historical</span>
+                    <span className="inline-flex items-center gap-1"><span className="w-3 h-0.5" style={{ background: GREEN, borderTop: `1px dashed ${GREEN}` }} /> Forecast</span>
+                    <span className="inline-flex items-center gap-1"><span className="w-3 h-2" style={{ background: "rgba(55,138,221,0.3)" }} /> 80% band</span>
+                  </div>
+                </div>
+                <ForecastChart result={result} currentPrice={currentPrice} />
+              </div>
+              <MiniCharts result={result} />
+              <FactorTable result={result} />
+              <ModelsPanel slot={slot} result={result} />
+            </>
+          ) : (
+            <FundamentalsPanel asset={asset} meta={meta} />
+          )}
         </div>
         <div className="space-y-4">
           <SignalDashboard result={result} />
