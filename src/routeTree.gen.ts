@@ -37,6 +37,7 @@ import { Route as BacktesterRouteImport } from './routes/backtester'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiForecastRouteImport } from './routes/api/forecast'
 import { Route as ApiPublicSyncQuotesRouteImport } from './routes/api/public/sync-quotes'
+import { Route as ApiPublicSyncEtfsRouteImport } from './routes/api/public/sync-etfs'
 
 const WatchlistRoute = WatchlistRouteImport.update({
   id: '/watchlist',
@@ -178,6 +179,11 @@ const ApiPublicSyncQuotesRoute = ApiPublicSyncQuotesRouteImport.update({
   path: '/api/public/sync-quotes',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSyncEtfsRoute = ApiPublicSyncEtfsRouteImport.update({
+  id: '/api/public/sync-etfs',
+  path: '/api/public/sync-etfs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -207,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
   '/api/forecast': typeof ApiForecastRoute
+  '/api/public/sync-etfs': typeof ApiPublicSyncEtfsRoute
   '/api/public/sync-quotes': typeof ApiPublicSyncQuotesRoute
 }
 export interface FileRoutesByTo {
@@ -237,6 +244,7 @@ export interface FileRoutesByTo {
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
   '/api/forecast': typeof ApiForecastRoute
+  '/api/public/sync-etfs': typeof ApiPublicSyncEtfsRoute
   '/api/public/sync-quotes': typeof ApiPublicSyncQuotesRoute
 }
 export interface FileRoutesById {
@@ -268,6 +276,7 @@ export interface FileRoutesById {
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
   '/api/forecast': typeof ApiForecastRoute
+  '/api/public/sync-etfs': typeof ApiPublicSyncEtfsRoute
   '/api/public/sync-quotes': typeof ApiPublicSyncQuotesRoute
 }
 export interface FileRouteTypes {
@@ -300,6 +309,7 @@ export interface FileRouteTypes {
     | '/tax'
     | '/watchlist'
     | '/api/forecast'
+    | '/api/public/sync-etfs'
     | '/api/public/sync-quotes'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -330,6 +340,7 @@ export interface FileRouteTypes {
     | '/tax'
     | '/watchlist'
     | '/api/forecast'
+    | '/api/public/sync-etfs'
     | '/api/public/sync-quotes'
   id:
     | '__root__'
@@ -360,6 +371,7 @@ export interface FileRouteTypes {
     | '/tax'
     | '/watchlist'
     | '/api/forecast'
+    | '/api/public/sync-etfs'
     | '/api/public/sync-quotes'
   fileRoutesById: FileRoutesById
 }
@@ -391,6 +403,7 @@ export interface RootRouteChildren {
   TaxRoute: typeof TaxRoute
   WatchlistRoute: typeof WatchlistRoute
   ApiForecastRoute: typeof ApiForecastRoute
+  ApiPublicSyncEtfsRoute: typeof ApiPublicSyncEtfsRoute
   ApiPublicSyncQuotesRoute: typeof ApiPublicSyncQuotesRoute
 }
 
@@ -592,6 +605,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicSyncQuotesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/sync-etfs': {
+      id: '/api/public/sync-etfs'
+      path: '/api/public/sync-etfs'
+      fullPath: '/api/public/sync-etfs'
+      preLoaderRoute: typeof ApiPublicSyncEtfsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -623,6 +643,7 @@ const rootRouteChildren: RootRouteChildren = {
   TaxRoute: TaxRoute,
   WatchlistRoute: WatchlistRoute,
   ApiForecastRoute: ApiForecastRoute,
+  ApiPublicSyncEtfsRoute: ApiPublicSyncEtfsRoute,
   ApiPublicSyncQuotesRoute: ApiPublicSyncQuotesRoute,
 }
 export const routeTree = rootRouteImport
