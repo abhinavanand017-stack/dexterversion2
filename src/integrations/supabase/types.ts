@@ -52,7 +52,9 @@ export type Database = {
           created_at: string
           day_change_pct: number | null
           etf_name: string
+          etf_ticker: string | null
           expense_ratio_pct: number | null
+          forecast_unavailable: boolean
           inav: number | null
           inception_date: string | null
           ltp_nav: number | null
@@ -77,7 +79,9 @@ export type Database = {
           created_at?: string
           day_change_pct?: number | null
           etf_name: string
+          etf_ticker?: string | null
           expense_ratio_pct?: number | null
+          forecast_unavailable?: boolean
           inav?: number | null
           inception_date?: string | null
           ltp_nav?: number | null
@@ -102,7 +106,9 @@ export type Database = {
           created_at?: string
           day_change_pct?: number | null
           etf_name?: string
+          etf_ticker?: string | null
           expense_ratio_pct?: number | null
+          forecast_unavailable?: boolean
           inav?: number | null
           inception_date?: string | null
           ltp_nav?: number | null
