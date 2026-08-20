@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 
 export interface EtfRow {
   ticker: string;
+  etf_ticker: string | null;
+  forecast_unavailable: boolean | null;
   etf_name: string;
   category: string;
   amc: string | null;
