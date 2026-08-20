@@ -7,6 +7,7 @@ import {
   LineChart,
 } from "recharts";
 import { fetchYahooChart, fetchYahooFundamentals, type YahooFundamentals } from "@/lib/yahoo.functions";
+import { listEtfs } from "@/lib/etf.functions";
 import { generateDexterInsight, generateFundamentalSummary } from "@/lib/forecast/insight.functions";
 import { runShortTermForecast, barsToOHLCV, HORIZON_DAYS, FACTOR_REGISTRY, ALL_FACTOR_KEYS, type Horizon, type EngineResult } from "@/lib/forecast/engine12";
 import { NIFTY500 } from "@/lib/nifty500";
@@ -42,14 +43,43 @@ const HORIZONS: Horizon[] = ["1D", "5D", "1M", "3M", "6M", "1Y", "3Y", "5Y"];
 
 // ── universe ──
 type AssetKind = "stock" | "index" | "etf" | "fund";
-interface Asset { key: string; symbol: string; name: string; kind: AssetKind; meta?: string; yahoo?: string; fundReturns?: { r1?: number | null; r3?: number | null; r5?: number | null; r10?: number | null; nav?: number | null } }
+interface Asset { key: string; symbol: string; name: string; kind: AssetKind; meta?: string; yahoo?: string; unavailable?: boolean; fundReturns?: { r1?: number | null; r3?: number | null; r5?: number | null; r10?: number | null; nav?: number | null } }
 
 const UNIVERSE: Asset[] = [
   ...NIFTY500.map((s): Asset => ({ key: `stock:${s.symbol}`, symbol: `${s.symbol}.NS`, name: s.name, kind: "stock", meta: s.sector, yahoo: `${s.symbol}.NS` })),
   ...INDICES_UNIVERSE.map((i): Asset => ({ key: `index:${i.symbol}`, symbol: i.symbol, name: i.name, kind: "index", meta: i.cat, yahoo: i.symbol })),
-  ...ETFS_UNIVERSE.map((e): Asset => ({ key: `etf:${e.name}`, symbol: e.name, name: e.name, kind: "etf", meta: e.cat, fundReturns: { r1: e.r1, r3: e.r3, r5: e.r5, nav: e.nav } })),
+  ...ETFS_UNIVERSE.map((e): Asset => ({ key: `etf:${e.name}`, symbol: e.name, name: e.name, kind: "etf", meta: e.cat, unavailable: true, fundReturns: { r1: e.r1, r3: e.r3, r5: e.r5, nav: e.nav } })),
   ...FUNDS_UNIVERSE.map((f): Asset => ({ key: `fund:${f.name}`, symbol: f.name, name: f.name, kind: "fund", meta: f.cat, fundReturns: { r1: f.r1, r3: f.r3, r5: f.r5, r10: f.r10, nav: null } })),
 ];
+
+// ETF assets come from the database (ticker + Yahoo-resolvable etf_ticker), so ETF
+// forecasts run on real daily NAV history through the same engine as stocks.
+function useUniverse(): Asset[] {
+  const etfQuery = useQuery({
+    queryKey: ["fc-etf-universe"],
+    queryFn: async () => (await listEtfs()).rows,
+    staleTime: 10 * 60_000,
+  });
+  return useMemo(() => {
+    const rows = etfQuery.data;
+    if (!rows?.length) return UNIVERSE;
+    const etfAssets: Asset[] = rows.map((r) => {
+      const yh = (r.etf_ticker ?? r.ticker) || "";
+      const unavailable = !!r.forecast_unavailable || !yh;
+      return {
+        key: `etf:${r.ticker}`,
+        symbol: r.ticker,
+        name: r.etf_name,
+        kind: "etf" as const,
+        meta: r.category,
+        yahoo: unavailable ? undefined : `${yh}.NS`,
+        unavailable,
+        fundReturns: { r1: r.ret_1yr_pct, r3: r.ret_3yr_pct, r5: r.ret_5yr_pct, nav: r.ltp_nav },
+      };
+    });
+    return [...UNIVERSE.filter((a) => a.kind !== "etf"), ...etfAssets];
+  }, [etfQuery.data]);
+}
 
 const POPULAR = ["stock:RELIANCE", "stock:TCS", "stock:HDFCBANK", "stock:INFY", "stock:BHARTIARTL", "stock:SBIN", "stock:BAJFINANCE", "index:^NSEI"];
 const LS_WATCH = "dx_fc_watch_v3";
@@ -104,7 +134,7 @@ async function loadYahoo(symbol: string, force = false): Promise<{ bars: CachedH
 }
 
 // ── Search combobox ──
-function SearchAssets({ selected, onSelect, placeholder = "Search stocks, indices, ETFs, mutual funds..." }: { selected: Asset | null; onSelect: (a: Asset | null) => void; placeholder?: string }) {
+function SearchAssets({ selected, onSelect, universe = UNIVERSE, placeholder = "Search stocks, indices, ETFs, mutual funds..." }: { selected: Asset | null; onSelect: (a: Asset | null) => void; universe?: Asset[]; placeholder?: string }) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
@@ -120,15 +150,15 @@ function SearchAssets({ selected, onSelect, placeholder = "Search stocks, indice
     const s = q.trim().toLowerCase();
     if (!s) return [] as Asset[];
     const hits: Asset[] = [];
-    for (const a of UNIVERSE) {
+    for (const a of universe) {
       if (hits.length >= 40) break;
       if (a.symbol.toLowerCase().includes(s) || a.name.toLowerCase().includes(s)) hits.push(a);
     }
     return hits;
-  }, [q]);
+  }, [q, universe]);
 
   const showPopular = !q.trim();
-  const popularAssets = useMemo(() => POPULAR.map((k) => UNIVERSE.find((a) => a.key === k)!).filter(Boolean), []);
+  const popularAssets = useMemo(() => POPULAR.map((k) => universe.find((a) => a.key === k)!).filter(Boolean), [universe]);
 
   return (
     <div ref={ref} className="relative">
@@ -479,6 +509,7 @@ function projectFund(a: Asset, years = [1, 3, 5, 10]): FundProjection | null {
 
 // ── Page ──
 function ForecastPage() {
+  const universe = useUniverse();
   const [selected, setSelected] = useState<Asset | null>(() => UNIVERSE.find((a) => a.key === "stock:RELIANCE") ?? null);
   const [compareOn, setCompareOn] = useState(false);
   const [selected2, setSelected2] = useState<Asset | null>(null);
@@ -528,8 +559,8 @@ function ForecastPage() {
         {/* Search + horizon */}
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-3">
           <div className="space-y-2">
-            <SearchAssets selected={selected} onSelect={setSelected} />
-            {compareOn && <SearchAssets selected={selected2} onSelect={setSelected2} placeholder="Compare against…" />}
+            <SearchAssets selected={selected} onSelect={setSelected} universe={universe} />
+            {compareOn && <SearchAssets selected={selected2} onSelect={setSelected2} universe={universe} placeholder="Compare against…" />}
           </div>
           <div className="flex items-center gap-1 flex-wrap rounded-xl p-1" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
             {HORIZONS.map((h) => (
@@ -545,7 +576,7 @@ function ForecastPage() {
           <div className="rounded-xl p-3 flex items-center gap-2 flex-wrap" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
             <span className="text-[10px] uppercase tracking-wider mr-2" style={{ color: MUTED }}>Watchlist</span>
             {watch.map((k) => {
-              const a = UNIVERSE.find((x) => x.key === k);
+              const a = universe.find((x) => x.key === k);
               if (!a) return null;
               return (
                 <button key={k} onClick={() => setSelected(a)} className="rounded-md px-2 py-1 text-xs font-mono hover:bg-white/5" style={{ border: `1px solid ${BORDER}` }}>
@@ -915,6 +946,12 @@ function SlotView({ slot, horizon, title, secondary }: { slot: SlotState; horizo
       </div>
     );
   }
+
+  if (!asset.yahoo || asset.unavailable) return (
+    <div className="rounded-xl p-5" style={{ background: CARD, border: `1px solid ${BORDER}`, color: AMBER }}>
+      Forecast unavailable for this ETF — no market-data ticker resolves for {asset.symbol}, so no real price history can be loaded.
+    </div>
+  );
 
   if (loading) return (
     <div className="rounded-xl p-8 flex items-center gap-3" style={{ background: CARD, border: `1px solid ${BORDER}`, color: MUTED }}>
