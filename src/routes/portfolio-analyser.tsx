@@ -429,6 +429,13 @@ function PortfolioAnalyser() {
         </div>
       )}
 
+      {parseErrors.length > 0 && (
+        <div className="dx-glass p-3 border-l-4 border-rose-500 text-sm">
+          <div className="flex items-center gap-2 font-semibold text-rose-400 mb-1"><XCircle className="h-4 w-4" /> File could not be used</div>
+          {parseErrors.map((w, i) => <div key={i} className="text-muted-foreground">{w}</div>)}
+        </div>
+      )}
+
       {warnings.length > 0 && (
         <div className="dx-glass p-3 border-l-4 border-amber-500 text-sm">
           <div className="flex items-center gap-2 font-semibold text-amber-400 mb-1"><AlertTriangle className="h-4 w-4" /> Warnings</div>
@@ -436,16 +443,44 @@ function PortfolioAnalyser() {
         </div>
       )}
 
+      {/* Editable preview before any analysis run */}
+      {tab === "upload" && holdings.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Review parsed holdings</h2>
+            <span className="text-xs text-muted-foreground">Fix any misread row before running the analysis.</span>
+          </div>
+          <PreviewTable holdings={holdings} onPatch={patch} onRemove={remove} />
+        </div>
+      )}
+
       {/* Analyse button */}
       {holdings.length > 0 && (
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center gap-2">
           <button onClick={analyze} disabled={analyzing}
             className="dx-pill dx-pill-ok flex items-center gap-2 px-6 py-2 text-base font-semibold">
             {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            {analyzing ? analysisStep : `Analyse Portfolio (${holdings.length} holdings)`}
+            {analyzing ? analysisStep : `Run Analysis (${holdings.length} holdings)`}
           </button>
+          <div className="text-[11px] text-muted-foreground flex items-center gap-2">
+            Prices <SourceBadge source={analysisRows.some((h) => h.priceSource === "live") ? "live" : "reference"} />
+            {analysisRows.filter((h) => h.priceSource === "reference").length > 0 &&
+              `${analysisRows.filter((h) => h.priceSource === "reference").length} row(s) using user-supplied prices`}
+          </div>
         </div>
       )}
+
+      {enrichError && (
+        <div className="dx-glass p-3 border-l-4 border-amber-500 text-sm text-muted-foreground">{enrichError}</div>
+      )}
+      {analysisError && (
+        <div className="dx-glass p-3 border-l-4 border-rose-500 text-sm">
+          <div className="flex items-center gap-2 font-semibold text-rose-400 mb-1"><XCircle className="h-4 w-4" /> Analysis failed</div>
+          <div className="text-muted-foreground">{analysisError}</div>
+        </div>
+      )}
+
+      {analysis && <ResultsDashboard result={analysis} rows={analysisRows} />}
 
       {/* Report */}
       {analyzed && holdings.length > 0 && (
