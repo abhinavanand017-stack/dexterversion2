@@ -1,13 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Upload, FileSpreadsheet, Download, Plus, Trash2, Save, FolderOpen, Play, AlertTriangle, TrendingUp, TrendingDown, Sparkles, Import, Loader2 } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { Upload, FileSpreadsheet, Download, Plus, Trash2, Save, FolderOpen, Play, AlertTriangle, TrendingUp, TrendingDown, Sparkles, Import, Loader2, XCircle } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { toast } from "sonner";
 import { StockCombobox, FundCombobox } from "@/components/AssetCombobox";
 import { useLiveQuotes } from "@/hooks/useLiveQuotes";
-import type { AnalyserHolding } from "@/lib/portfolioAnalyser/types";
+import type { AnalyserHolding, AnalysisResult, EnrichedHolding } from "@/lib/portfolioAnalyser/types";
 import { downloadTemplate, parseWorkbook, exportHoldings } from "@/lib/portfolioAnalyser/excel";
-import { xirr, sharpeRatio, cagr } from "@/lib/portfolioAnalyser/math";
+import { xirr, cagr } from "@/lib/portfolioAnalyser/math";
+import { assetAllocation, sectorConcentration, diversificationScore } from "@/lib/portfolioAnalyser/stats";
+import { analyzePortfolio } from "@/lib/portfolioAnalyser/analyze.functions";
+import { fetchYahooFundamentals } from "@/lib/yahoo.functions";
+import { PreviewTable } from "@/components/portfolioAnalyser/PreviewTable";
+import { ResultsDashboard } from "@/components/portfolioAnalyser/ResultsDashboard";
+import { SourceBadge } from "@/components/portfolioAnalyser/SourceBadge";
 import { readHoldings as readMyPortfolio } from "@/hooks/usePortfolio";
 import { formatINR } from "@/lib/formatINR";
 
