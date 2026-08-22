@@ -102,16 +102,29 @@ function PortfolioAnalyser() {
     } else if (h.schemeCode && fundNavs[String(h.schemeCode)]) {
       cp = fundNavs[String(h.schemeCode)].nav; live = true;
     } else cp = cp ?? h.avgCost;
-    void live;
-    const value = cp * h.qty;
+    const price = cp ?? h.avgCost;
+    const value = price * h.qty;
     const invested = h.avgCost * h.qty;
     const pnl = value - invested;
     const pnlPct = invested > 0 ? pnl / invested : 0;
     const years = Math.max(0.01, (Date.now() - new Date(h.buyDate).getTime()) / (365.25 * 86400_000));
-    const holdCagr = cagr(h.avgCost, cp, years);
+    const holdCagr = cagr(h.avgCost, price, years);
     const dayChange = h.kind === "stock" ? (quotes[h.symbol]?.change ?? 0) * h.qty : 0;
-    return { ...h, currentPrice: cp, value, invested, pnl, pnlPct, years, holdCagr, dayChange };
-  }), [holdings, quotes, fundNavs]);
+    return {
+      ...h, currentPrice: price, price,
+      priceSource: (live ? "live" : "reference") as EnrichedHolding["priceSource"],
+      value, invested, pnl, pnlPct, years, holdCagr, dayChange, weight: 0,
+      fundamentals: fundamentals[h.symbol.toUpperCase()],
+      fundamentalsSource: (fundamentals[h.symbol.toUpperCase()] ? "live" : "reference") as EnrichedHolding["priceSource"],
+      unresolved: !h.symbol.trim() || !live,
+    };
+  }), [holdings, quotes, fundNavs, fundamentals]);
+
+  const totalBookValue = useMemo(() => enriched.reduce((s, h) => s + h.value, 0), [enriched]);
+  const analysisRows: EnrichedHolding[] = useMemo(
+    () => enriched.map((h) => ({ ...h, weight: totalBookValue > 0 ? (h.value / totalBookValue) * 100 : 0 })),
+    [enriched, totalBookValue],
+  );
 
   const totals = useMemo(() => {
     const totalValue = enriched.reduce((s, h) => s + h.value, 0);
