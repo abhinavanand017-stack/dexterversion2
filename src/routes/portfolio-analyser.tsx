@@ -203,6 +203,9 @@ function PortfolioAnalyser() {
   const addFundRow = () => setHoldings((p) => [...p, {
     id: crypto.randomUUID(), kind: "fund", symbol: "", name: "", qty: 0, avgCost: 0, buyDate: new Date().toISOString(),
   }]);
+  const addEtfRow = () => setHoldings((p) => [...p, {
+    id: crypto.randomUUID(), kind: "etf" as const, symbol: "", name: "", qty: 0, avgCost: 0, buyDate: new Date().toISOString(),
+  }]);
 
   const patch = (id: string, updates: Partial<AnalyserHolding>) =>
     setHoldings((p) => p.map((h) => h.id === id ? { ...h, ...updates } : h));
