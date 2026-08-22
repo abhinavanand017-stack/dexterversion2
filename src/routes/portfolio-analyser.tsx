@@ -584,7 +584,7 @@ function PortfolioAnalyser() {
                     return (
                       <tr key={h.id} className={`border-b border-border/40 ${border}`}>
                         <td className="py-2 px-2 font-medium">{h.name || h.symbol}</td>
-                        <td className="py-2 px-2 text-xs text-muted-foreground">{h.kind === "stock" ? "Stock" : "Fund"}</td>
+                        <td className="py-2 px-2 text-xs text-muted-foreground">{h.kind === "stock" ? "Stock" : h.kind === "etf" ? "ETF" : "Fund"}</td>
                         <td className="py-2 px-2 text-right font-mono">{h.qty.toLocaleString("en-IN", { maximumFractionDigits: 3 })}</td>
                         <td className="py-2 px-2 text-right font-mono">{formatINR(h.avgCost)}</td>
                         <td className="py-2 px-2 text-right font-mono">{formatINR(h.currentPrice ?? 0)}</td>
