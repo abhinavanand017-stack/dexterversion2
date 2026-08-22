@@ -244,20 +244,75 @@ function PortfolioAnalyser() {
 
   const analyze = async () => {
     if (!holdings.length) { toast.error("Add holdings first"); return; }
-    setAnalyzing(true);
-    const steps = [
-      "⏳ Validating holdings...",
-      "📡 Fetching live prices & NAV...",
-      "📊 Computing portfolio metrics...",
-      "🔮 Running forecast models...",
-      "📝 Generating report...",
-    ];
-    for (const s of steps) {
-      setAnalysisStep(s);
-      await new Promise((r) => setTimeout(r, 400));
+    const invalid = holdings.filter((h) => !h.symbol.trim() || !h.qty || !h.avgCost);
+    if (invalid.length) {
+      setAnalysisError(`${invalid.length} row(s) are missing a symbol, quantity or average cost. Fix them in the preview above before running the analysis.`);
+      return;
     }
-    setAnalyzing(false);
-    setAnalyzed(true);
+    setAnalyzing(true);
+    setAnalysisError(null); setEnrichError(null); setAnalysis(null);
+
+    // 1) enrichment — fundamentals for listed instruments (prices already stream in via useLiveQuotes)
+    setAnalysisStep("Enriching holdings with live market data…");
+    const listed = holdings.filter((h) => h.kind === "stock" || h.kind === "etf").slice(0, 25);
+    const got: Record<string, EnrichedHolding["fundamentals"]> = {};
+    let failures = 0;
+    await Promise.all(listed.map(async (h) => {
+      const key = h.symbol.toUpperCase();
+      if (fundamentals[key]) return;
+      try {
+        const r = await getFundamentals({ data: { symbol: `${key}.NS` } });
+        if (r.ok) {
+          got[key] = {
+            sector: r.data.sector, marketCap: r.data.marketCap, pe: r.data.peTrailing,
+            pb: r.data.pb, roePct: r.data.roePct, beta: r.data.beta,
+            w52High: r.data.w52High, w52Low: r.data.w52Low,
+          };
+        } else failures++;
+      } catch { failures++; }
+    }));
+    if (Object.keys(got).length) setFundamentals((p) => ({ ...p, ...got }));
+    if (failures) setEnrichError(`Fundamentals could not be fetched for ${failures} instrument(s) — those rows are marked Reference and analysed qualitatively.`);
+
+    // 2) analysis call
+    setAnalysisStep("Running institutional analysis…");
+    const total = enriched.reduce((s, h) => s + h.value, 0) || 1;
+    const div = diversificationScore(analysisRows);
+    try {
+      const res = await runAnalysis({
+        data: {
+          holdings: enriched.map((h) => {
+            const f = got[h.symbol.toUpperCase()] ?? h.fundamentals;
+            return {
+              symbol: h.symbol, name: h.name || h.symbol, kind: h.kind,
+              qty: h.qty, avgCost: h.avgCost, price: h.price, priceSource: h.priceSource,
+              value: h.value, weightPct: (h.value / total) * 100, pnlPct: h.pnlPct, years: h.years,
+              sector: f?.sector ?? h.sector ?? null,
+              category: h.category ?? null,
+              marketCapCr: f?.marketCap ? f.marketCap / 1e7 : null,
+              pe: f?.pe ?? null, pb: f?.pb ?? null, roePct: f?.roePct ?? null, beta: f?.beta ?? null,
+              w52High: f?.w52High ?? null, w52Low: f?.w52Low ?? null,
+            };
+          }),
+          totals: { value: total, invested: enriched.reduce((s, h) => s + h.invested, 0), pnlPct: totals.pnlPct },
+          allocation: assetAllocation(analysisRows).map((a) => ({ label: a.label, pct: a.pct })),
+          sectors: sectorConcentration(analysisRows).map((s) => ({ name: s.name, pct: s.pct })),
+          diversification: { score: div.score, drag: div.drag },
+          mandate: null,
+        },
+      });
+      if (!res.ok || !res.result) {
+        setAnalysisError(res.error ?? "Analysis failed.");
+      } else {
+        setAnalysis(res.result);
+        setAnalyzed(true);
+      }
+    } catch (e) {
+      setAnalysisError(`Analysis request failed: ${(e as Error).message}`);
+    } finally {
+      setAnalyzing(false);
+      setAnalysisStep("");
+    }
   };
 
   const exportXlsx = () => {
