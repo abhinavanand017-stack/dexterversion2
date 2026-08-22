@@ -44,11 +44,18 @@ function PortfolioAnalyser() {
   const [tab, setTab] = useState<"upload" | "manual">("upload");
   const [holdings, setHoldings] = useState<AnalyserHolding[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState<string>("");
   const [analyzed, setAnalyzed] = useState(false);
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+  const [fundamentals, setFundamentals] = useState<Record<string, EnrichedHolding["fundamentals"]>>({});
   const [fundNavs, setFundNavs] = useState<Record<string, FundNav>>({});
   const dropRef = useRef<HTMLDivElement>(null);
+  const runAnalysis = useServerFn(analyzePortfolio);
+  const getFundamentals = useServerFn(fetchYahooFundamentals);
 
   // load saved
   useEffect(() => {
