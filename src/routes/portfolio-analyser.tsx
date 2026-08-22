@@ -1,13 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Upload, FileSpreadsheet, Download, Plus, Trash2, Save, FolderOpen, Play, AlertTriangle, TrendingUp, TrendingDown, Sparkles, Import, Loader2 } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { Upload, FileSpreadsheet, Download, Plus, Trash2, Save, FolderOpen, Play, AlertTriangle, TrendingUp, TrendingDown, Sparkles, Import, Loader2, XCircle } from "lucide-react";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { toast } from "sonner";
 import { StockCombobox, FundCombobox } from "@/components/AssetCombobox";
 import { useLiveQuotes } from "@/hooks/useLiveQuotes";
-import type { AnalyserHolding } from "@/lib/portfolioAnalyser/types";
+import type { AnalyserHolding, AnalysisResult, EnrichedHolding } from "@/lib/portfolioAnalyser/types";
 import { downloadTemplate, parseWorkbook, exportHoldings } from "@/lib/portfolioAnalyser/excel";
-import { xirr, sharpeRatio, cagr } from "@/lib/portfolioAnalyser/math";
+import { xirr, cagr } from "@/lib/portfolioAnalyser/math";
+import { assetAllocation, sectorConcentration, diversificationScore } from "@/lib/portfolioAnalyser/stats";
+import { analyzePortfolio } from "@/lib/portfolioAnalyser/analyze.functions";
+import { fetchYahooFundamentals } from "@/lib/yahoo.functions";
+import { PreviewTable } from "@/components/portfolioAnalyser/PreviewTable";
+import { ResultsDashboard } from "@/components/portfolioAnalyser/ResultsDashboard";
+import { SourceBadge } from "@/components/portfolioAnalyser/SourceBadge";
 import { readHoldings as readMyPortfolio } from "@/hooks/usePortfolio";
 import { formatINR } from "@/lib/formatINR";
 
@@ -44,11 +51,18 @@ function PortfolioAnalyser() {
   const [tab, setTab] = useState<"upload" | "manual">("upload");
   const [holdings, setHoldings] = useState<AnalyserHolding[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisStep, setAnalysisStep] = useState<string>("");
   const [analyzed, setAnalyzed] = useState(false);
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+  const [fundamentals, setFundamentals] = useState<Record<string, EnrichedHolding["fundamentals"]>>({});
   const [fundNavs, setFundNavs] = useState<Record<string, FundNav>>({});
   const dropRef = useRef<HTMLDivElement>(null);
+  const runAnalysis = useServerFn(analyzePortfolio);
+  const getFundamentals = useServerFn(fetchYahooFundamentals);
 
   // load saved
   useEffect(() => {
@@ -58,9 +72,9 @@ function PortfolioAnalyser() {
     } catch { /* ignore */ }
   }, []);
 
-  // Live prices for stocks
+  // Live prices for listed instruments (stocks + ETFs)
   const stockSymbols = useMemo(
-    () => holdings.filter((h) => h.kind === "stock").map((h) => h.symbol),
+    () => holdings.filter((h) => h.kind === "stock" || h.kind === "etf").map((h) => h.symbol).filter(Boolean),
     [holdings]
   );
   const { quotes } = useLiveQuotes(stockSymbols);
@@ -80,18 +94,37 @@ function PortfolioAnalyser() {
   // Enriched holdings with current price
   const enriched = useMemo(() => holdings.map((h) => {
     let cp = h.currentPrice;
-    if (h.kind === "stock") cp = quotes[h.symbol]?.price ?? cp ?? h.avgCost;
-    else if (h.schemeCode) cp = fundNavs[String(h.schemeCode)]?.nav ?? cp ?? h.avgCost;
-    else cp = cp ?? h.avgCost;
-    const value = cp * h.qty;
+    let live = false;
+    if (h.kind === "stock" || h.kind === "etf") {
+      const q = quotes[h.symbol];
+      if (q && q.price > 0 && q.source !== "unavailable") { cp = q.price; live = true; }
+      else cp = cp ?? h.avgCost;
+    } else if (h.schemeCode && fundNavs[String(h.schemeCode)]) {
+      cp = fundNavs[String(h.schemeCode)].nav; live = true;
+    } else cp = cp ?? h.avgCost;
+    const price = cp ?? h.avgCost;
+    const value = price * h.qty;
     const invested = h.avgCost * h.qty;
     const pnl = value - invested;
     const pnlPct = invested > 0 ? pnl / invested : 0;
     const years = Math.max(0.01, (Date.now() - new Date(h.buyDate).getTime()) / (365.25 * 86400_000));
-    const holdCagr = cagr(h.avgCost, cp, years);
+    const holdCagr = cagr(h.avgCost, price, years);
     const dayChange = h.kind === "stock" ? (quotes[h.symbol]?.change ?? 0) * h.qty : 0;
-    return { ...h, currentPrice: cp, value, invested, pnl, pnlPct, years, holdCagr, dayChange };
-  }), [holdings, quotes, fundNavs]);
+    return {
+      ...h, currentPrice: price, price,
+      priceSource: (live ? "live" : "reference") as EnrichedHolding["priceSource"],
+      value, invested, pnl, pnlPct, years, holdCagr, dayChange, weight: 0,
+      fundamentals: fundamentals[h.symbol.toUpperCase()],
+      fundamentalsSource: (fundamentals[h.symbol.toUpperCase()] ? "live" : "reference") as EnrichedHolding["priceSource"],
+      unresolved: !h.symbol.trim() || !live,
+    };
+  }), [holdings, quotes, fundNavs, fundamentals]);
+
+  const totalBookValue = useMemo(() => enriched.reduce((s, h) => s + h.value, 0), [enriched]);
+  const analysisRows: EnrichedHolding[] = useMemo(
+    () => enriched.map((h) => ({ ...h, weight: totalBookValue > 0 ? (h.value / totalBookValue) * 100 : 0 })),
+    [enriched, totalBookValue],
+  );
 
   const totals = useMemo(() => {
     const totalValue = enriched.reduce((s, h) => s + h.value, 0);
@@ -143,15 +176,18 @@ function PortfolioAnalyser() {
 
   // handlers
   const onFile = async (file: File) => {
+    setWarnings([]); setParseErrors([]); setAnalysis(null); setAnalysisError(null); setEnrichError(null);
     try {
-      setWarnings([]);
       const res = await parseWorkbook(file);
-      setHoldings(res.holdings);
       setWarnings(res.warnings);
-      toast.success(`Imported ${res.holdings.length} holdings`);
+      setParseErrors(res.errors);
+      if (res.errors.length) { setHoldings([]); toast.error(res.errors[0]); setAnalyzed(false); return; }
+      setHoldings(res.holdings);
+      toast.success(`Parsed ${res.holdings.length} holdings — review before running analysis`);
       setAnalyzed(false);
     } catch (e) {
-      toast.error("Failed to parse file: " + (e as Error).message);
+      setParseErrors([`Failed to parse "${file.name}": ${(e as Error).message}`]);
+      toast.error("Failed to parse file");
     }
   };
 
@@ -166,6 +202,9 @@ function PortfolioAnalyser() {
   }]);
   const addFundRow = () => setHoldings((p) => [...p, {
     id: crypto.randomUUID(), kind: "fund", symbol: "", name: "", qty: 0, avgCost: 0, buyDate: new Date().toISOString(),
+  }]);
+  const addEtfRow = () => setHoldings((p) => [...p, {
+    id: crypto.randomUUID(), kind: "etf" as const, symbol: "", name: "", qty: 0, avgCost: 0, buyDate: new Date().toISOString(),
   }]);
 
   const patch = (id: string, updates: Partial<AnalyserHolding>) =>
@@ -208,20 +247,75 @@ function PortfolioAnalyser() {
 
   const analyze = async () => {
     if (!holdings.length) { toast.error("Add holdings first"); return; }
-    setAnalyzing(true);
-    const steps = [
-      "⏳ Validating holdings...",
-      "📡 Fetching live prices & NAV...",
-      "📊 Computing portfolio metrics...",
-      "🔮 Running forecast models...",
-      "📝 Generating report...",
-    ];
-    for (const s of steps) {
-      setAnalysisStep(s);
-      await new Promise((r) => setTimeout(r, 400));
+    const invalid = holdings.filter((h) => !h.symbol.trim() || !h.qty || !h.avgCost);
+    if (invalid.length) {
+      setAnalysisError(`${invalid.length} row(s) are missing a symbol, quantity or average cost. Fix them in the preview above before running the analysis.`);
+      return;
     }
-    setAnalyzing(false);
-    setAnalyzed(true);
+    setAnalyzing(true);
+    setAnalysisError(null); setEnrichError(null); setAnalysis(null);
+
+    // 1) enrichment — fundamentals for listed instruments (prices already stream in via useLiveQuotes)
+    setAnalysisStep("Enriching holdings with live market data…");
+    const listed = holdings.filter((h) => h.kind === "stock" || h.kind === "etf").slice(0, 25);
+    const got: Record<string, EnrichedHolding["fundamentals"]> = {};
+    let failures = 0;
+    await Promise.all(listed.map(async (h) => {
+      const key = h.symbol.toUpperCase();
+      if (fundamentals[key]) return;
+      try {
+        const r = await getFundamentals({ data: { symbol: `${key}.NS` } });
+        if (r.ok) {
+          got[key] = {
+            sector: r.data.sector, marketCap: r.data.marketCap, pe: r.data.peTrailing,
+            pb: r.data.pb, roePct: r.data.roePct, beta: r.data.beta,
+            w52High: r.data.w52High, w52Low: r.data.w52Low,
+          };
+        } else failures++;
+      } catch { failures++; }
+    }));
+    if (Object.keys(got).length) setFundamentals((p) => ({ ...p, ...got }));
+    if (failures) setEnrichError(`Fundamentals could not be fetched for ${failures} instrument(s) — those rows are marked Reference and analysed qualitatively.`);
+
+    // 2) analysis call
+    setAnalysisStep("Running institutional analysis…");
+    const total = enriched.reduce((s, h) => s + h.value, 0) || 1;
+    const div = diversificationScore(analysisRows);
+    try {
+      const res = await runAnalysis({
+        data: {
+          holdings: enriched.map((h) => {
+            const f = got[h.symbol.toUpperCase()] ?? h.fundamentals;
+            return {
+              symbol: h.symbol, name: h.name || h.symbol, kind: h.kind,
+              qty: h.qty, avgCost: h.avgCost, price: h.price, priceSource: h.priceSource,
+              value: h.value, weightPct: (h.value / total) * 100, pnlPct: h.pnlPct, years: h.years,
+              sector: f?.sector ?? h.sector ?? null,
+              category: h.category ?? null,
+              marketCapCr: f?.marketCap ? f.marketCap / 1e7 : null,
+              pe: f?.pe ?? null, pb: f?.pb ?? null, roePct: f?.roePct ?? null, beta: f?.beta ?? null,
+              w52High: f?.w52High ?? null, w52Low: f?.w52Low ?? null,
+            };
+          }),
+          totals: { value: total, invested: enriched.reduce((s, h) => s + h.invested, 0), pnlPct: totals.pnlPct },
+          allocation: assetAllocation(analysisRows).map((a) => ({ label: a.label, pct: a.pct })),
+          sectors: sectorConcentration(analysisRows).map((s) => ({ name: s.name, pct: s.pct })),
+          diversification: { score: div.score, drag: div.drag },
+          mandate: null,
+        },
+      });
+      if (!res.ok || !res.result) {
+        setAnalysisError(res.error ?? "Analysis failed.");
+      } else {
+        setAnalysis(res.result);
+        setAnalyzed(true);
+      }
+    } catch (e) {
+      setAnalysisError(`Analysis request failed: ${(e as Error).message}`);
+    } finally {
+      setAnalyzing(false);
+      setAnalysisStep("");
+    }
   };
 
   const exportXlsx = () => {
@@ -300,6 +394,7 @@ function PortfolioAnalyser() {
           <div className="flex flex-wrap gap-2">
             <button onClick={addStockRow} className="dx-pill flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add Stock</button>
             <button onClick={addFundRow} className="dx-pill flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add Mutual Fund</button>
+            <button onClick={addEtfRow} className="dx-pill flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add ETF</button>
             <button onClick={importFromMyPortfolio} className="dx-pill flex items-center gap-1"><Import className="h-3.5 w-3.5" /> Import from My Portfolio</button>
           </div>
           {holdings.length === 0 && (
@@ -338,6 +433,13 @@ function PortfolioAnalyser() {
         </div>
       )}
 
+      {parseErrors.length > 0 && (
+        <div className="dx-glass p-3 border-l-4 border-rose-500 text-sm">
+          <div className="flex items-center gap-2 font-semibold text-rose-400 mb-1"><XCircle className="h-4 w-4" /> File could not be used</div>
+          {parseErrors.map((w, i) => <div key={i} className="text-muted-foreground">{w}</div>)}
+        </div>
+      )}
+
       {warnings.length > 0 && (
         <div className="dx-glass p-3 border-l-4 border-amber-500 text-sm">
           <div className="flex items-center gap-2 font-semibold text-amber-400 mb-1"><AlertTriangle className="h-4 w-4" /> Warnings</div>
@@ -345,16 +447,44 @@ function PortfolioAnalyser() {
         </div>
       )}
 
+      {/* Editable preview before any analysis run */}
+      {tab === "upload" && holdings.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Review parsed holdings</h2>
+            <span className="text-xs text-muted-foreground">Fix any misread row before running the analysis.</span>
+          </div>
+          <PreviewTable holdings={holdings} onPatch={patch} onRemove={remove} />
+        </div>
+      )}
+
       {/* Analyse button */}
       {holdings.length > 0 && (
-        <div className="flex justify-center">
+        <div className="flex flex-col items-center gap-2">
           <button onClick={analyze} disabled={analyzing}
             className="dx-pill dx-pill-ok flex items-center gap-2 px-6 py-2 text-base font-semibold">
             {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            {analyzing ? analysisStep : `Analyse Portfolio (${holdings.length} holdings)`}
+            {analyzing ? analysisStep : `Run Analysis (${holdings.length} holdings)`}
           </button>
+          <div className="text-[11px] text-muted-foreground flex items-center gap-2">
+            Prices <SourceBadge source={analysisRows.some((h) => h.priceSource === "live") ? "live" : "reference"} />
+            {analysisRows.filter((h) => h.priceSource === "reference").length > 0 &&
+              `${analysisRows.filter((h) => h.priceSource === "reference").length} row(s) using user-supplied prices`}
+          </div>
         </div>
       )}
+
+      {enrichError && (
+        <div className="dx-glass p-3 border-l-4 border-amber-500 text-sm text-muted-foreground">{enrichError}</div>
+      )}
+      {analysisError && (
+        <div className="dx-glass p-3 border-l-4 border-rose-500 text-sm">
+          <div className="flex items-center gap-2 font-semibold text-rose-400 mb-1"><XCircle className="h-4 w-4" /> Analysis failed</div>
+          <div className="text-muted-foreground">{analysisError}</div>
+        </div>
+      )}
+
+      {analysis && <ResultsDashboard result={analysis} rows={analysisRows} />}
 
       {/* Report */}
       {analyzed && holdings.length > 0 && (
@@ -458,7 +588,7 @@ function PortfolioAnalyser() {
                     return (
                       <tr key={h.id} className={`border-b border-border/40 ${border}`}>
                         <td className="py-2 px-2 font-medium">{h.name || h.symbol}</td>
-                        <td className="py-2 px-2 text-xs text-muted-foreground">{h.kind === "stock" ? "Stock" : "Fund"}</td>
+                        <td className="py-2 px-2 text-xs text-muted-foreground">{h.kind === "stock" ? "Stock" : h.kind === "etf" ? "ETF" : "Fund"}</td>
                         <td className="py-2 px-2 text-right font-mono">{h.qty.toLocaleString("en-IN", { maximumFractionDigits: 3 })}</td>
                         <td className="py-2 px-2 text-right font-mono">{formatINR(h.avgCost)}</td>
                         <td className="py-2 px-2 text-right font-mono">{formatINR(h.currentPrice ?? 0)}</td>
