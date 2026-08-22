@@ -72,9 +72,9 @@ function PortfolioAnalyser() {
     } catch { /* ignore */ }
   }, []);
 
-  // Live prices for stocks
+  // Live prices for listed instruments (stocks + ETFs)
   const stockSymbols = useMemo(
-    () => holdings.filter((h) => h.kind === "stock").map((h) => h.symbol),
+    () => holdings.filter((h) => h.kind === "stock" || h.kind === "etf").map((h) => h.symbol).filter(Boolean),
     [holdings]
   );
   const { quotes } = useLiveQuotes(stockSymbols);
@@ -94,9 +94,15 @@ function PortfolioAnalyser() {
   // Enriched holdings with current price
   const enriched = useMemo(() => holdings.map((h) => {
     let cp = h.currentPrice;
-    if (h.kind === "stock") cp = quotes[h.symbol]?.price ?? cp ?? h.avgCost;
-    else if (h.schemeCode) cp = fundNavs[String(h.schemeCode)]?.nav ?? cp ?? h.avgCost;
-    else cp = cp ?? h.avgCost;
+    let live = false;
+    if (h.kind === "stock" || h.kind === "etf") {
+      const q = quotes[h.symbol];
+      if (q && q.price > 0 && q.source !== "unavailable") { cp = q.price; live = true; }
+      else cp = cp ?? h.avgCost;
+    } else if (h.schemeCode && fundNavs[String(h.schemeCode)]) {
+      cp = fundNavs[String(h.schemeCode)].nav; live = true;
+    } else cp = cp ?? h.avgCost;
+    void live;
     const value = cp * h.qty;
     const invested = h.avgCost * h.qty;
     const pnl = value - invested;
