@@ -176,15 +176,18 @@ function PortfolioAnalyser() {
 
   // handlers
   const onFile = async (file: File) => {
+    setWarnings([]); setParseErrors([]); setAnalysis(null); setAnalysisError(null); setEnrichError(null);
     try {
-      setWarnings([]);
       const res = await parseWorkbook(file);
-      setHoldings(res.holdings);
       setWarnings(res.warnings);
-      toast.success(`Imported ${res.holdings.length} holdings`);
+      setParseErrors(res.errors);
+      if (res.errors.length) { setHoldings([]); toast.error(res.errors[0]); setAnalyzed(false); return; }
+      setHoldings(res.holdings);
+      toast.success(`Parsed ${res.holdings.length} holdings — review before running analysis`);
       setAnalyzed(false);
     } catch (e) {
-      toast.error("Failed to parse file: " + (e as Error).message);
+      setParseErrors([`Failed to parse "${file.name}": ${(e as Error).message}`]);
+      toast.error("Failed to parse file");
     }
   };
 
