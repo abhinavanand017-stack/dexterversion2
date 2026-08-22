@@ -391,6 +391,7 @@ function PortfolioAnalyser() {
           <div className="flex flex-wrap gap-2">
             <button onClick={addStockRow} className="dx-pill flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add Stock</button>
             <button onClick={addFundRow} className="dx-pill flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add Mutual Fund</button>
+            <button onClick={addEtfRow} className="dx-pill flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add ETF</button>
             <button onClick={importFromMyPortfolio} className="dx-pill flex items-center gap-1"><Import className="h-3.5 w-3.5" /> Import from My Portfolio</button>
           </div>
           {holdings.length === 0 && (
