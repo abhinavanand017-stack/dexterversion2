@@ -515,6 +515,7 @@ function PortfolioAnalyser() {
               <MetricCard label="Sharpe (est)" value={totals.sharpe.toFixed(2)} />
               <MetricCard label="Stocks Value" value={formatINR(totals.stocksValue)} />
               <MetricCard label="Funds Value" value={formatINR(totals.fundsValue)} />
+              <MetricCard label="ETFs Value" value={formatINR(totals.etfsValue)} />
             </div>
 
             {(totals.best || totals.worst) && (
