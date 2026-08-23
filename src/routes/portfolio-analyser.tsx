@@ -157,7 +157,7 @@ function PortfolioAnalyser() {
     const approxDailyStd = 0.011; // 11% annualised placeholder for Phase 1
     const sharpe = approxDailyStd ? (portReturn - 0.065) / (approxDailyStd * Math.sqrt(252)) : 0;
 
-    return { totalValue, totalInvested, stocksValue, fundsValue, dayChange, pnl, pnlPct, irr, best, worst, sharpe };
+    return { totalValue, totalInvested, stocksValue, fundsValue, etfsValue, dayChange, pnl, pnlPct, irr, best, worst, sharpe };
   }, [enriched]);
 
   const allocation = useMemo(() => {
