@@ -132,6 +132,7 @@ function PortfolioAnalyser() {
     const totalInvested = enriched.reduce((s, h) => s + h.invested, 0);
     const stocksValue = enriched.filter((h) => h.kind === "stock").reduce((s, h) => s + h.value, 0);
     const fundsValue = enriched.filter((h) => h.kind === "fund").reduce((s, h) => s + h.value, 0);
+    const etfsValue = enriched.filter((h) => h.kind === "etf").reduce((s, h) => s + h.value, 0);
     const dayChange = enriched.reduce((s, h) => s + h.dayChange, 0);
     const pnl = totalValue - totalInvested;
     const pnlPct = totalInvested > 0 ? pnl / totalInvested : 0;
@@ -140,7 +141,10 @@ function PortfolioAnalyser() {
       { amount: -h.invested, date: new Date(h.buyDate) },
     ]);
     if (totalValue > 0) cf.push({ amount: totalValue, date: new Date() });
-    const irr = cf.length > 1 ? xirr(cf) : null;
+    // XIRR needs a meaningful holding period; below ~1 month it explodes.
+    const oldest = Math.min(...enriched.map((h) => new Date(h.buyDate).getTime()), Date.now());
+    const spanYears = (Date.now() - oldest) / (365.25 * 86400_000);
+    const irr = cf.length > 1 && spanYears >= 0.08 ? xirr(cf) : null;
 
     // portfolio daily returns approximation from holdings' CAGR mix — Sharpe rough estimate
     const sortedByPct = [...enriched].sort((a, b) => b.pnlPct - a.pnlPct);
