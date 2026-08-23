@@ -411,6 +411,15 @@ function PortfolioAnalyser() {
                       value={h.symbol ? { symbol: h.symbol, name: h.name, sector: h.sector || "Other", bucket: "nifty500" } as never : null}
                       onChange={(s) => patch(h.id, { symbol: s.symbol, name: s.name, sector: s.sector })}
                     />
+                  ) : h.kind === "etf" ? (
+                    <div className="flex gap-2">
+                      <input placeholder="NSE symbol (e.g. NIFTYBEES)" value={h.symbol}
+                        onChange={(e) => patch(h.id, { symbol: e.target.value.toUpperCase() })}
+                        className="w-40 rounded border border-border bg-background/40 px-2 py-1.5 font-mono text-sm" />
+                      <input placeholder="ETF name" value={h.name}
+                        onChange={(e) => patch(h.id, { name: e.target.value })}
+                        className="flex-1 rounded border border-border bg-background/40 px-2 py-1.5 text-sm" />
+                    </div>
                   ) : (
                     <FundCombobox
                       value={h.schemeCode ? { code: h.schemeCode, name: h.name, house: "", category: h.category || "" } as never : null}
