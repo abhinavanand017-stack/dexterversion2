@@ -108,7 +108,8 @@ function PortfolioAnalyser() {
     const pnl = value - invested;
     const pnlPct = invested > 0 ? pnl / invested : 0;
     const years = Math.max(0.01, (Date.now() - new Date(h.buyDate).getTime()) / (365.25 * 86400_000));
-    const holdCagr = cagr(h.avgCost, price, years);
+    // CAGR is meaningless for very short holds — report 0 rather than an absurd annualised figure.
+    const holdCagr = years >= 0.25 ? cagr(h.avgCost, price, years) : 0;
     const dayChange = h.kind === "stock" ? (quotes[h.symbol]?.change ?? 0) * h.qty : 0;
     return {
       ...h, currentPrice: price, price,
