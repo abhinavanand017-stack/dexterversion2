@@ -108,7 +108,8 @@ function PortfolioAnalyser() {
     const pnl = value - invested;
     const pnlPct = invested > 0 ? pnl / invested : 0;
     const years = Math.max(0.01, (Date.now() - new Date(h.buyDate).getTime()) / (365.25 * 86400_000));
-    const holdCagr = cagr(h.avgCost, price, years);
+    // CAGR is meaningless for very short holds — report 0 rather than an absurd annualised figure.
+    const holdCagr = years >= 0.25 ? cagr(h.avgCost, price, years) : 0;
     const dayChange = h.kind === "stock" ? (quotes[h.symbol]?.change ?? 0) * h.qty : 0;
     return {
       ...h, currentPrice: price, price,
@@ -131,6 +132,7 @@ function PortfolioAnalyser() {
     const totalInvested = enriched.reduce((s, h) => s + h.invested, 0);
     const stocksValue = enriched.filter((h) => h.kind === "stock").reduce((s, h) => s + h.value, 0);
     const fundsValue = enriched.filter((h) => h.kind === "fund").reduce((s, h) => s + h.value, 0);
+    const etfsValue = enriched.filter((h) => h.kind === "etf").reduce((s, h) => s + h.value, 0);
     const dayChange = enriched.reduce((s, h) => s + h.dayChange, 0);
     const pnl = totalValue - totalInvested;
     const pnlPct = totalInvested > 0 ? pnl / totalInvested : 0;
@@ -139,7 +141,10 @@ function PortfolioAnalyser() {
       { amount: -h.invested, date: new Date(h.buyDate) },
     ]);
     if (totalValue > 0) cf.push({ amount: totalValue, date: new Date() });
-    const irr = cf.length > 1 ? xirr(cf) : null;
+    // XIRR needs a meaningful holding period; below ~1 month it explodes.
+    const oldest = Math.min(...enriched.map((h) => new Date(h.buyDate).getTime()), Date.now());
+    const spanYears = (Date.now() - oldest) / (365.25 * 86400_000);
+    const irr = cf.length > 1 && spanYears >= 0.08 ? xirr(cf) : null;
 
     // portfolio daily returns approximation from holdings' CAGR mix — Sharpe rough estimate
     const sortedByPct = [...enriched].sort((a, b) => b.pnlPct - a.pnlPct);
@@ -152,7 +157,7 @@ function PortfolioAnalyser() {
     const approxDailyStd = 0.011; // 11% annualised placeholder for Phase 1
     const sharpe = approxDailyStd ? (portReturn - 0.065) / (approxDailyStd * Math.sqrt(252)) : 0;
 
-    return { totalValue, totalInvested, stocksValue, fundsValue, dayChange, pnl, pnlPct, irr, best, worst, sharpe };
+    return { totalValue, totalInvested, stocksValue, fundsValue, etfsValue, dayChange, pnl, pnlPct, irr, best, worst, sharpe };
   }, [enriched]);
 
   const allocation = useMemo(() => {
@@ -411,6 +416,15 @@ function PortfolioAnalyser() {
                       value={h.symbol ? { symbol: h.symbol, name: h.name, sector: h.sector || "Other", bucket: "nifty500" } as never : null}
                       onChange={(s) => patch(h.id, { symbol: s.symbol, name: s.name, sector: s.sector })}
                     />
+                  ) : h.kind === "etf" ? (
+                    <div className="flex gap-2">
+                      <input placeholder="NSE symbol (e.g. NIFTYBEES)" value={h.symbol}
+                        onChange={(e) => patch(h.id, { symbol: e.target.value.toUpperCase() })}
+                        className="w-40 rounded border border-border bg-background/40 px-2 py-1.5 font-mono text-sm" />
+                      <input placeholder="ETF name" value={h.name}
+                        onChange={(e) => patch(h.id, { name: e.target.value })}
+                        className="flex-1 rounded border border-border bg-background/40 px-2 py-1.5 text-sm" />
+                    </div>
                   ) : (
                     <FundCombobox
                       value={h.schemeCode ? { code: h.schemeCode, name: h.name, house: "", category: h.category || "" } as never : null}
@@ -501,6 +515,7 @@ function PortfolioAnalyser() {
               <MetricCard label="Sharpe (est)" value={totals.sharpe.toFixed(2)} />
               <MetricCard label="Stocks Value" value={formatINR(totals.stocksValue)} />
               <MetricCard label="Funds Value" value={formatINR(totals.fundsValue)} />
+              <MetricCard label="ETFs Value" value={formatINR(totals.etfsValue)} />
             </div>
 
             {(totals.best || totals.worst) && (
