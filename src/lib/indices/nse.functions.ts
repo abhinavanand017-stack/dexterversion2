@@ -54,10 +54,8 @@ const n = (v: unknown): number | null => {
 };
 
 type Row = Record<string, unknown> & { index?: string };
-const cache: { ts: number; rows: Row[] } | Record<string, never> = {} as never;
 let allCache: { ts: number; rows: Row[] } | null = null;
 const TTL = 20_000;
-void cache;
 
 export const getIndexSnapshot = createServerFn({ method: "GET" })
   .inputValidator((input: { nseName: string }) => ({ nseName: String(input.nseName || "").slice(0, 64) }))
