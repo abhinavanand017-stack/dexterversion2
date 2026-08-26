@@ -121,14 +121,12 @@ export function IndexDashboard({ index }: { index: IndianIndex }) {
     let dead = false;
     setPeersLoading(true);
     (async () => {
-      const out: Record<string, Bar[]> = {};
-      for (const p of peers) {
-        const r = await chart({ data: { symbol: p.yahoo, range: "5y", interval: "1d" } });
-        if (dead) return;
-        out[p.key] = r.bars as Bar[];
-        setPeerBars({ ...out });
-      }
-      if (!dead) setPeersLoading(false);
+      const results = await Promise.all(
+        peers.map(async (p) => [p.key, (await chart({ data: { symbol: p.yahoo, range: "5y", interval: "1d" } })).bars as Bar[]] as const),
+      );
+      if (dead) return;
+      setPeerBars(Object.fromEntries(results));
+      setPeersLoading(false);
     })();
     return () => { dead = true; };
   }, [tab, peers, chart, peerBars, peersLoading]);
@@ -139,13 +137,10 @@ export function IndexDashboard({ index }: { index: IndianIndex }) {
     let dead = false;
     (async () => {
       const sectorals = INDIAN_INDICES.filter((i) => i.category === "sectoral" && i.nseName);
-      const tiles: { name: string; weight: number; pct: number }[] = [];
-      for (const s of sectorals) {
-        const r = await snapFn({ data: { nseName: s.nseName! } });
-        if (dead) return;
-        if (r.ok && r.snapshot) tiles.push({ name: s.name.replace("NIFTY ", ""), weight: 1, pct: r.snapshot.percentChange });
-      }
-      if (!dead) setSectorTiles(tiles);
+      const res = await Promise.all(sectorals.map(async (s) => [s, await snapFn({ data: { nseName: s.nseName! } })] as const));
+      if (dead) return;
+      setSectorTiles(res.filter(([, r]) => r.ok && r.snapshot)
+        .map(([s, r]) => ({ name: s.name.replace("NIFTY ", ""), weight: 1, pct: r.snapshot!.percentChange })));
     })();
     return () => { dead = true; };
   }, [tab, snapFn, sectorTiles.length]);
