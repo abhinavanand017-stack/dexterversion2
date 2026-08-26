@@ -17,16 +17,14 @@ export const peerColor = (i: number) => PEER_COLORS[i % PEER_COLORS.length];
 const dateFmt = (t: number) => new Date(t).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" });
 const shortFmt = (t: number) => new Date(t).toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
 
-export function ChartFrame({ title, note, height = 260, children }: { title: string; note?: React.ReactNode; height?: number; children: React.ReactElement }) {
+export function ChartFrame({ title, note, height = 260, children }: { title: string; note?: React.ReactNode; height?: number; children: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-border bg-card/40 p-3">
       <div className="flex items-center justify-between gap-2 mb-2">
         <h3 className="text-xs font-mono uppercase tracking-wider text-muted-foreground">{title}</h3>
         {note}
       </div>
-      <div style={{ height }}>
-        <ResponsiveContainer>{children}</ResponsiveContainer>
-      </div>
+      <div style={{ height }}>{children}</div>
     </div>
   );
 }
@@ -35,114 +33,128 @@ export function PriceChart({ bars, intraday }: { bars: OHLC[]; intraday?: boolea
   const up = bars.length > 1 && bars[bars.length - 1].c >= bars[0].c;
   const color = up ? UP : DOWN;
   return (
-    <AreaChart data={bars}>
-      <defs>
-        <linearGradient id="pxg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity={0.35} />
-          <stop offset="100%" stopColor={color} stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      <CartesianGrid stroke={GRID} />
-      <XAxis dataKey="t" tick={TICK} tickFormatter={intraday ? (t) => new Date(t).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : shortFmt} minTickGap={40} />
-      <YAxis domain={["auto", "auto"]} tick={TICK} width={62} tickFormatter={(v) => Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })} />
-      <Tooltip contentStyle={TOOLTIP} labelFormatter={(t) => dateFmt(t as number)} formatter={(v) => [Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 }), "Level"]} />
-      <Area dataKey="c" stroke={color} strokeWidth={2} fill="url(#pxg)" dot={false} isAnimationActive={false} />
-    </AreaChart>
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={bars}>
+        <defs>
+          <linearGradient id="pxg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke={GRID} />
+        <XAxis dataKey="t" tick={TICK} tickFormatter={intraday ? (t) => new Date(t).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : shortFmt} minTickGap={40} />
+        <YAxis domain={["auto", "auto"]} tick={TICK} width={62} tickFormatter={(v) => Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })} />
+        <Tooltip contentStyle={TOOLTIP} labelFormatter={(t) => dateFmt(t as number)} formatter={(v) => [Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 }), "Level"]} />
+        <Area dataKey="c" stroke={color} strokeWidth={2} fill="url(#pxg)" dot={false} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
   );
 }
 
 export function RebasedChart({ rows, series }: { rows: Record<string, number | string>[]; series: { key: string; name: string }[] }) {
   return (
-    <LineChart data={rows}>
-      <CartesianGrid stroke={GRID} />
-      <XAxis dataKey="date" tick={TICK} minTickGap={50} tickFormatter={(d) => new Date(d as string).toLocaleDateString("en-IN", { month: "short", year: "2-digit" })} />
-      <YAxis tick={TICK} width={46} domain={["auto", "auto"]} />
-      <Tooltip contentStyle={TOOLTIP} formatter={(v, n) => [Number(v).toFixed(1), n as string]} />
-      <Legend wrapperStyle={{ fontSize: 10 }} />
-      <ReferenceLine y={100} stroke="rgba(255,255,255,0.2)" strokeDasharray="3 3" />
-      {series.map((s, i) => (
-        <Line key={s.key} dataKey={s.key} name={s.name} stroke={peerColor(i)} strokeWidth={i === 0 ? 2.4 : 1.3} dot={false} isAnimationActive={false} connectNulls />
-      ))}
-    </LineChart>
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={rows}>
+        <CartesianGrid stroke={GRID} />
+        <XAxis dataKey="date" tick={TICK} minTickGap={50} tickFormatter={(d) => new Date(d as string).toLocaleDateString("en-IN", { month: "short", year: "2-digit" })} />
+        <YAxis tick={TICK} width={46} domain={["auto", "auto"]} />
+        <Tooltip contentStyle={TOOLTIP} formatter={(v, n) => [Number(v).toFixed(1), n as string]} />
+        <Legend wrapperStyle={{ fontSize: 10 }} />
+        <ReferenceLine y={100} stroke="rgba(255,255,255,0.2)" strokeDasharray="3 3" />
+        {series.map((s, i) => (
+          <Line key={s.key} dataKey={s.key} name={s.name} stroke={peerColor(i)} strokeWidth={i === 0 ? 2.4 : 1.3} dot={false} isAnimationActive={false} connectNulls />
+        ))}
+      </LineChart>
+    </ResponsiveContainer>
   );
 }
 
 export function CalendarReturnsChart({ data }: { data: { year: number; pct: number }[] }) {
   return (
-    <BarChart data={data}>
-      <CartesianGrid stroke={GRID} />
-      <XAxis dataKey="year" tick={TICK} />
-      <YAxis tick={TICK} width={46} tickFormatter={(v) => `${v}%`} />
-      <Tooltip contentStyle={TOOLTIP} formatter={(v) => [`${Number(v).toFixed(2)}%`, "Return"]} />
-      <ReferenceLine y={0} stroke="rgba(255,255,255,0.25)" />
-      <Bar dataKey="pct" isAnimationActive={false}>
-        {data.map((d) => <Cell key={d.year} fill={d.pct >= 0 ? UP : DOWN} />)}
-      </Bar>
-    </BarChart>
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data}>
+        <CartesianGrid stroke={GRID} />
+        <XAxis dataKey="year" tick={TICK} />
+        <YAxis tick={TICK} width={46} tickFormatter={(v) => `${v}%`} />
+        <Tooltip contentStyle={TOOLTIP} formatter={(v) => [`${Number(v).toFixed(2)}%`, "Return"]} />
+        <ReferenceLine y={0} stroke="rgba(255,255,255,0.25)" />
+        <Bar dataKey="pct" isAnimationActive={false}>
+          {data.map((d) => <Cell key={d.year} fill={d.pct >= 0 ? UP : DOWN} />)}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
   );
 }
 
 export function DrawdownChart({ series }: { series: Point[] }) {
   return (
-    <AreaChart data={series}>
-      <defs>
-        <linearGradient id="ddg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={DOWN} stopOpacity={0} />
-          <stop offset="100%" stopColor={DOWN} stopOpacity={0.4} />
-        </linearGradient>
-      </defs>
-      <CartesianGrid stroke={GRID} />
-      <XAxis dataKey="t" tick={TICK} tickFormatter={shortFmt} minTickGap={40} />
-      <YAxis tick={TICK} width={46} tickFormatter={(v) => `${v}%`} />
-      <Tooltip contentStyle={TOOLTIP} labelFormatter={(t) => dateFmt(t as number)} formatter={(v) => [`${Number(v).toFixed(2)}%`, "Drawdown"]} />
-      <Area dataKey="v" stroke={DOWN} strokeWidth={1.2} fill="url(#ddg)" dot={false} isAnimationActive={false} />
-    </AreaChart>
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={series}>
+        <defs>
+          <linearGradient id="ddg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={DOWN} stopOpacity={0} />
+            <stop offset="100%" stopColor={DOWN} stopOpacity={0.4} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke={GRID} />
+        <XAxis dataKey="t" tick={TICK} tickFormatter={shortFmt} minTickGap={40} />
+        <YAxis tick={TICK} width={46} tickFormatter={(v) => `${v}%`} />
+        <Tooltip contentStyle={TOOLTIP} labelFormatter={(t) => dateFmt(t as number)} formatter={(v) => [`${Number(v).toFixed(2)}%`, "Drawdown"]} />
+        <Area dataKey="v" stroke={DOWN} strokeWidth={1.2} fill="url(#ddg)" dot={false} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
   );
 }
 
 export function VolatilityChart({ series }: { series: { t: number; v30?: number; v90?: number; v365?: number }[] }) {
   return (
-    <LineChart data={series}>
-      <CartesianGrid stroke={GRID} />
-      <XAxis dataKey="t" tick={TICK} tickFormatter={shortFmt} minTickGap={40} />
-      <YAxis tick={TICK} width={46} tickFormatter={(v) => `${v}%`} />
-      <Tooltip contentStyle={TOOLTIP} labelFormatter={(t) => dateFmt(t as number)} formatter={(v, n) => [`${Number(v).toFixed(1)}%`, n as string]} />
-      <Legend wrapperStyle={{ fontSize: 10 }} />
-      <Line dataKey="v30" name="30d" stroke={ACCENT} strokeWidth={1.2} dot={false} isAnimationActive={false} connectNulls />
-      <Line dataKey="v90" name="90d" stroke="#f5c451" strokeWidth={1.2} dot={false} isAnimationActive={false} connectNulls />
-      <Line dataKey="v365" name="365d" stroke="#a78bfa" strokeWidth={1.2} dot={false} isAnimationActive={false} connectNulls />
-    </LineChart>
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={series}>
+        <CartesianGrid stroke={GRID} />
+        <XAxis dataKey="t" tick={TICK} tickFormatter={shortFmt} minTickGap={40} />
+        <YAxis tick={TICK} width={46} tickFormatter={(v) => `${v}%`} />
+        <Tooltip contentStyle={TOOLTIP} labelFormatter={(t) => dateFmt(t as number)} formatter={(v, n) => [`${Number(v).toFixed(1)}%`, n as string]} />
+        <Legend wrapperStyle={{ fontSize: 10 }} />
+        <Line dataKey="v30" name="30d" stroke={ACCENT} strokeWidth={1.2} dot={false} isAnimationActive={false} connectNulls />
+        <Line dataKey="v90" name="90d" stroke="#f5c451" strokeWidth={1.2} dot={false} isAnimationActive={false} connectNulls />
+        <Line dataKey="v365" name="365d" stroke="#a78bfa" strokeWidth={1.2} dot={false} isAnimationActive={false} connectNulls />
+      </LineChart>
+    </ResponsiveContainer>
   );
 }
 
 export function PeBandChart({ series, mean, upper, lower }: { series: Point[]; mean: number; upper: number; lower: number }) {
   const data = series.map((s) => ({ ...s, upper, lower, mean }));
   return (
-    <LineChart data={data}>
-      <CartesianGrid stroke={GRID} />
-      <XAxis dataKey="t" tick={TICK} tickFormatter={shortFmt} minTickGap={40} />
-      <YAxis tick={TICK} width={46} domain={["auto", "auto"]} />
-      <Tooltip contentStyle={TOOLTIP} labelFormatter={(t) => dateFmt(t as number)} formatter={(v, n) => [Number(v).toFixed(2), n as string]} />
-      <Line dataKey="upper" name="+1σ" stroke="#ff4466" strokeDasharray="4 4" strokeWidth={1} dot={false} isAnimationActive={false} />
-      <Line dataKey="mean" name="Mean" stroke="#94a3b8" strokeDasharray="4 4" strokeWidth={1} dot={false} isAnimationActive={false} />
-      <Line dataKey="lower" name="-1σ" stroke="#00ff88" strokeDasharray="4 4" strokeWidth={1} dot={false} isAnimationActive={false} />
-      <Line dataKey="v" name="P/E" stroke={ACCENT} strokeWidth={2} dot={false} isAnimationActive={false} />
-      <Legend wrapperStyle={{ fontSize: 10 }} />
-    </LineChart>
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={data}>
+        <CartesianGrid stroke={GRID} />
+        <XAxis dataKey="t" tick={TICK} tickFormatter={shortFmt} minTickGap={40} />
+        <YAxis tick={TICK} width={46} domain={["auto", "auto"]} />
+        <Tooltip contentStyle={TOOLTIP} labelFormatter={(t) => dateFmt(t as number)} formatter={(v, n) => [Number(v).toFixed(2), n as string]} />
+        <Line dataKey="upper" name="+1σ" stroke="#ff4466" strokeDasharray="4 4" strokeWidth={1} dot={false} isAnimationActive={false} />
+        <Line dataKey="mean" name="Mean" stroke="#94a3b8" strokeDasharray="4 4" strokeWidth={1} dot={false} isAnimationActive={false} />
+        <Line dataKey="lower" name="-1σ" stroke="#00ff88" strokeDasharray="4 4" strokeWidth={1} dot={false} isAnimationActive={false} />
+        <Line dataKey="v" name="P/E" stroke={ACCENT} strokeWidth={2} dot={false} isAnimationActive={false} />
+        <Legend wrapperStyle={{ fontSize: 10 }} />
+      </LineChart>
+    </ResponsiveContainer>
   );
 }
 
 export function ScenarioChart({ data }: { data: { name: string; target: number; prob: number }[] }) {
   return (
-    <BarChart data={data}>
-      <CartesianGrid stroke={GRID} />
-      <XAxis dataKey="name" tick={TICK} />
-      <YAxis tick={TICK} width={62} domain={["auto", "auto"]} tickFormatter={(v) => Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })} />
-      <Tooltip contentStyle={TOOLTIP} formatter={(v, n, p) => [`${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })} (${(p.payload as { prob: number }).prob}% prob)`, "Target"]} />
-      <Bar dataKey="target" isAnimationActive={false}>
-        {data.map((d) => <Cell key={d.name} fill={d.name === "Bull" ? UP : d.name === "Bear" ? DOWN : ACCENT} />)}
-      </Bar>
-    </BarChart>
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data}>
+        <CartesianGrid stroke={GRID} />
+        <XAxis dataKey="name" tick={TICK} />
+        <YAxis tick={TICK} width={62} domain={["auto", "auto"]} tickFormatter={(v) => Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })} />
+        <Tooltip contentStyle={TOOLTIP} formatter={(v, n, p) => [`${Number(v).toLocaleString("en-IN", { maximumFractionDigits: 0 })} (${(p.payload as { prob: number }).prob}% prob)`, "Target"]} />
+        <Bar dataKey="target" isAnimationActive={false}>
+          {data.map((d) => <Cell key={d.name} fill={d.name === "Bull" ? UP : d.name === "Bear" ? DOWN : ACCENT} />)}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
   );
 }
 
