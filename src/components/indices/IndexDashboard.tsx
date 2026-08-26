@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Sparkles, AlertTriangle } from "lucide-react";
 import { fetchYahooChart } from "@/lib/yahoo.functions";
@@ -133,17 +133,15 @@ export function IndexDashboard({ index }: { index: IndianIndex }) {
 
   // ── sector map (NSE sectoral indices, day change — reference view) ───
   useEffect(() => {
-    if (tab !== "overview" || sectorTiles.length) return;
-    let dead = false;
+    if (tab !== "overview" || sectorStartedRef.current) return;
+    sectorStartedRef.current = true;
     (async () => {
       const sectorals = INDIAN_INDICES.filter((i) => i.category === "sectoral" && i.nseName);
       const res = await Promise.all(sectorals.map(async (s) => [s, await snapFn({ data: { nseName: s.nseName! } })] as const));
-      if (dead) return;
       setSectorTiles(res.filter(([, r]) => r.ok && r.snapshot)
         .map(([s, r]) => ({ name: s.name.replace("NIFTY ", ""), weight: 1, pct: r.snapshot!.percentChange })));
     })();
-    return () => { dead = true; };
-  }, [tab, snapFn, sectorTiles.length]);
+  }, [tab, snapFn]);
 
   const peerStats = useMemo(() => peers.map((p) => {
     const pb = peerBars[p.key] ?? [];
