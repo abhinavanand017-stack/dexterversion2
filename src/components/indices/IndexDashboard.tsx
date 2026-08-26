@@ -124,7 +124,15 @@ export function IndexDashboard({ index }: { index: IndianIndex }) {
     setPeersLoading(true);
     (async () => {
       const results = await Promise.all(
-        peers.map(async (p) => [p.key, (await chart({ data: { symbol: p.yahoo, range: "5y", interval: "1d" } })).bars as Bar[]] as const),
+        peers.map(async (p) => {
+          try {
+            const r = await chart({ data: { symbol: p.yahoo, range: "5y", interval: "1d" } });
+            return [p.key, (r.bars ?? []) as Bar[]] as const;
+          } catch (e) {
+            console.error("peer fetch failed", p.yahoo, e);
+            return [p.key, [] as Bar[]] as const;
+          }
+        }),
       );
       setPeerBars(Object.fromEntries(results));
       setPeersLoading(false);
