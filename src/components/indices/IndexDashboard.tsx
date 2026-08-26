@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Loader2, Sparkles, AlertTriangle } from "lucide-react";
 import { fetchYahooChart } from "@/lib/yahoo.functions";
@@ -54,6 +54,8 @@ export function IndexDashboard({ index }: { index: IndianIndex }) {
   const [peerBars, setPeerBars] = useState<Record<string, Bar[]>>({});
   const [peersLoading, setPeersLoading] = useState(false);
   const [sectorTiles, setSectorTiles] = useState<{ name: string; weight: number; pct: number }[]>([]);
+  const peersStartedRef = useRef<string | null>(null);
+  const sectorStartedRef = useRef(false);
 
   const [analysis, setAnalysis] = useState<IndexAnalysis | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -117,38 +119,37 @@ export function IndexDashboard({ index }: { index: IndianIndex }) {
 
   // ── global peers (lazy: only when the Global tab opens) ──────────────
   useEffect(() => {
-    if (tab !== "global" || peersLoading || Object.keys(peerBars).length || !peers.length) return;
-    let dead = false;
+    if (tab !== "global" || !peers.length || peersStartedRef.current === index.key) return;
+    peersStartedRef.current = index.key;
     setPeersLoading(true);
     (async () => {
-      const out: Record<string, Bar[]> = {};
-      for (const p of peers) {
-        const r = await chart({ data: { symbol: p.yahoo, range: "5y", interval: "1d" } });
-        if (dead) return;
-        out[p.key] = r.bars as Bar[];
-        setPeerBars({ ...out });
-      }
-      if (!dead) setPeersLoading(false);
+      const results = await Promise.all(
+        peers.map(async (p) => {
+          try {
+            const r = await chart({ data: { symbol: p.yahoo, range: "5y", interval: "1d" } });
+            return [p.key, (r.bars ?? []) as Bar[]] as const;
+          } catch (e) {
+            console.error("peer fetch failed", p.yahoo, e);
+            return [p.key, [] as Bar[]] as const;
+          }
+        }),
+      );
+      setPeerBars(Object.fromEntries(results));
+      setPeersLoading(false);
     })();
-    return () => { dead = true; };
-  }, [tab, peers, chart, peerBars, peersLoading]);
+  }, [tab, peers, chart, index.key]);
 
   // ── sector map (NSE sectoral indices, day change — reference view) ───
   useEffect(() => {
-    if (tab !== "overview" || sectorTiles.length) return;
-    let dead = false;
+    if (tab !== "overview" || sectorStartedRef.current) return;
+    sectorStartedRef.current = true;
     (async () => {
       const sectorals = INDIAN_INDICES.filter((i) => i.category === "sectoral" && i.nseName);
-      const tiles: { name: string; weight: number; pct: number }[] = [];
-      for (const s of sectorals) {
-        const r = await snapFn({ data: { nseName: s.nseName! } });
-        if (dead) return;
-        if (r.ok && r.snapshot) tiles.push({ name: s.name.replace("NIFTY ", ""), weight: 1, pct: r.snapshot.percentChange });
-      }
-      if (!dead) setSectorTiles(tiles);
+      const res = await Promise.all(sectorals.map(async (s) => [s, await snapFn({ data: { nseName: s.nseName! } })] as const));
+      setSectorTiles(res.filter(([, r]) => r.ok && r.snapshot)
+        .map(([s, r]) => ({ name: s.name.replace("NIFTY ", ""), weight: 1, pct: r.snapshot!.percentChange })));
     })();
-    return () => { dead = true; };
-  }, [tab, snapFn, sectorTiles.length]);
+  }, [tab, snapFn]);
 
   const peerStats = useMemo(() => peers.map((p) => {
     const pb = peerBars[p.key] ?? [];
