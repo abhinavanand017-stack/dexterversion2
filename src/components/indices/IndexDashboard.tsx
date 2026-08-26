@@ -54,6 +54,8 @@ export function IndexDashboard({ index }: { index: IndianIndex }) {
   const [peerBars, setPeerBars] = useState<Record<string, Bar[]>>({});
   const [peersLoading, setPeersLoading] = useState(false);
   const [sectorTiles, setSectorTiles] = useState<{ name: string; weight: number; pct: number }[]>([]);
+  const peersStartedRef = useRef<string | null>(null);
+  const sectorStartedRef = useRef(false);
 
   const [analysis, setAnalysis] = useState<IndexAnalysis | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
