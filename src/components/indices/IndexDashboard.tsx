@@ -117,19 +117,17 @@ export function IndexDashboard({ index }: { index: IndianIndex }) {
 
   // ── global peers (lazy: only when the Global tab opens) ──────────────
   useEffect(() => {
-    if (tab !== "global" || peersLoading || Object.keys(peerBars).length || !peers.length) return;
-    let dead = false;
+    if (tab !== "global" || !peers.length || peersStartedRef.current === index.key) return;
+    peersStartedRef.current = index.key;
     setPeersLoading(true);
     (async () => {
       const results = await Promise.all(
         peers.map(async (p) => [p.key, (await chart({ data: { symbol: p.yahoo, range: "5y", interval: "1d" } })).bars as Bar[]] as const),
       );
-      if (dead) return;
       setPeerBars(Object.fromEntries(results));
       setPeersLoading(false);
     })();
-    return () => { dead = true; };
-  }, [tab, peers, chart, peerBars, peersLoading]);
+  }, [tab, peers, chart, index.key]);
 
   // ── sector map (NSE sectoral indices, day change — reference view) ───
   useEffect(() => {
