@@ -154,9 +154,222 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_prices_eod: {
+        Row: {
+          as_of: string
+          close: number | null
+          date: string
+          delivery_pct: number | null
+          high: number | null
+          low: number | null
+          open: number | null
+          source_tier: number
+          ticker: string
+          volume: number | null
+          w52_high: number | null
+          w52_low: number | null
+        }
+        Insert: {
+          as_of?: string
+          close?: number | null
+          date: string
+          delivery_pct?: number | null
+          high?: number | null
+          low?: number | null
+          open?: number | null
+          source_tier?: number
+          ticker: string
+          volume?: number | null
+          w52_high?: number | null
+          w52_low?: number | null
+        }
+        Update: {
+          as_of?: string
+          close?: number | null
+          date?: string
+          delivery_pct?: number | null
+          high?: number | null
+          low?: number | null
+          open?: number | null
+          source_tier?: number
+          ticker?: string
+          volume?: number | null
+          w52_high?: number | null
+          w52_low?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_prices_eod_ticker_fkey"
+            columns: ["ticker"]
+            isOneToOne: false
+            referencedRelation: "stock_screener_rows"
+            referencedColumns: ["ticker"]
+          },
+          {
+            foreignKeyName: "stock_prices_eod_ticker_fkey"
+            columns: ["ticker"]
+            isOneToOne: false
+            referencedRelation: "stock_universe"
+            referencedColumns: ["ticker"]
+          },
+        ]
+      }
+      stock_technicals: {
+        Row: {
+          as_of: string
+          beta: number | null
+          date: string
+          dma200: number | null
+          dma50: number | null
+          pct_from_52w_high: number | null
+          pct_from_52w_low: number | null
+          ret_1m_pct: number | null
+          ret_1y_pct: number | null
+          ret_3m_pct: number | null
+          rsi14: number | null
+          source_tier: number
+          ticker: string
+          volume_vs_20d_avg: number | null
+        }
+        Insert: {
+          as_of?: string
+          beta?: number | null
+          date: string
+          dma200?: number | null
+          dma50?: number | null
+          pct_from_52w_high?: number | null
+          pct_from_52w_low?: number | null
+          ret_1m_pct?: number | null
+          ret_1y_pct?: number | null
+          ret_3m_pct?: number | null
+          rsi14?: number | null
+          source_tier?: number
+          ticker: string
+          volume_vs_20d_avg?: number | null
+        }
+        Update: {
+          as_of?: string
+          beta?: number | null
+          date?: string
+          dma200?: number | null
+          dma50?: number | null
+          pct_from_52w_high?: number | null
+          pct_from_52w_low?: number | null
+          ret_1m_pct?: number | null
+          ret_1y_pct?: number | null
+          ret_3m_pct?: number | null
+          rsi14?: number | null
+          source_tier?: number
+          ticker?: string
+          volume_vs_20d_avg?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_technicals_ticker_fkey"
+            columns: ["ticker"]
+            isOneToOne: false
+            referencedRelation: "stock_screener_rows"
+            referencedColumns: ["ticker"]
+          },
+          {
+            foreignKeyName: "stock_technicals_ticker_fkey"
+            columns: ["ticker"]
+            isOneToOne: false
+            referencedRelation: "stock_universe"
+            referencedColumns: ["ticker"]
+          },
+        ]
+      }
+      stock_universe: {
+        Row: {
+          as_of: string
+          company_name: string
+          exchange: string
+          free_float_pct: number | null
+          inclusion_date: string
+          index_membership: string[]
+          isin: string | null
+          market_cap_cr: number | null
+          nse_industry: string | null
+          sector: string | null
+          source_tier: number
+          sub_sector: string | null
+          ticker: string
+          universe_rank: number | null
+        }
+        Insert: {
+          as_of?: string
+          company_name: string
+          exchange?: string
+          free_float_pct?: number | null
+          inclusion_date?: string
+          index_membership?: string[]
+          isin?: string | null
+          market_cap_cr?: number | null
+          nse_industry?: string | null
+          sector?: string | null
+          source_tier?: number
+          sub_sector?: string | null
+          ticker: string
+          universe_rank?: number | null
+        }
+        Update: {
+          as_of?: string
+          company_name?: string
+          exchange?: string
+          free_float_pct?: number | null
+          inclusion_date?: string
+          index_membership?: string[]
+          isin?: string | null
+          market_cap_cr?: number | null
+          nse_industry?: string | null
+          sector?: string | null
+          source_tier?: number
+          sub_sector?: string | null
+          ticker?: string
+          universe_rank?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      stock_screener_rows: {
+        Row: {
+          beta: number | null
+          close: number | null
+          company_name: string | null
+          delivery_pct: number | null
+          dma200: number | null
+          dma50: number | null
+          exchange: string | null
+          free_float_pct: number | null
+          high: number | null
+          index_membership: string[] | null
+          isin: string | null
+          low: number | null
+          market_cap_cr: number | null
+          open: number | null
+          pct_from_52w_high: number | null
+          pct_from_52w_low: number | null
+          price_as_of: string | null
+          price_date: string | null
+          ret_1m_pct: number | null
+          ret_1y_pct: number | null
+          ret_3m_pct: number | null
+          rsi14: number | null
+          sector: string | null
+          sub_sector: string | null
+          technicals_as_of: string | null
+          ticker: string | null
+          universe_as_of: string | null
+          universe_rank: number | null
+          volume: number | null
+          volume_vs_20d_avg: number | null
+          w52_high: number | null
+          w52_low: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never

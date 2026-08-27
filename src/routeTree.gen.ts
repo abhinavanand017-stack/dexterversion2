@@ -38,6 +38,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiForecastRouteImport } from './routes/api/forecast'
 import { Route as ApiPublicSyncQuotesRouteImport } from './routes/api/public/sync-quotes'
 import { Route as ApiPublicSyncEtfsRouteImport } from './routes/api/public/sync-etfs'
+import { Route as ApiPublicDataRefreshEodRouteImport } from './routes/api/public/data-refresh-eod'
 
 const WatchlistRoute = WatchlistRouteImport.update({
   id: '/watchlist',
@@ -184,6 +185,11 @@ const ApiPublicSyncEtfsRoute = ApiPublicSyncEtfsRouteImport.update({
   path: '/api/public/sync-etfs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicDataRefreshEodRoute = ApiPublicDataRefreshEodRouteImport.update({
+  id: '/api/public/data-refresh-eod',
+  path: '/api/public/data-refresh-eod',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -213,6 +219,7 @@ export interface FileRoutesByFullPath {
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
   '/api/forecast': typeof ApiForecastRoute
+  '/api/public/data-refresh-eod': typeof ApiPublicDataRefreshEodRoute
   '/api/public/sync-etfs': typeof ApiPublicSyncEtfsRoute
   '/api/public/sync-quotes': typeof ApiPublicSyncQuotesRoute
 }
@@ -244,6 +251,7 @@ export interface FileRoutesByTo {
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
   '/api/forecast': typeof ApiForecastRoute
+  '/api/public/data-refresh-eod': typeof ApiPublicDataRefreshEodRoute
   '/api/public/sync-etfs': typeof ApiPublicSyncEtfsRoute
   '/api/public/sync-quotes': typeof ApiPublicSyncQuotesRoute
 }
@@ -276,6 +284,7 @@ export interface FileRoutesById {
   '/tax': typeof TaxRoute
   '/watchlist': typeof WatchlistRoute
   '/api/forecast': typeof ApiForecastRoute
+  '/api/public/data-refresh-eod': typeof ApiPublicDataRefreshEodRoute
   '/api/public/sync-etfs': typeof ApiPublicSyncEtfsRoute
   '/api/public/sync-quotes': typeof ApiPublicSyncQuotesRoute
 }
@@ -309,6 +318,7 @@ export interface FileRouteTypes {
     | '/tax'
     | '/watchlist'
     | '/api/forecast'
+    | '/api/public/data-refresh-eod'
     | '/api/public/sync-etfs'
     | '/api/public/sync-quotes'
   fileRoutesByTo: FileRoutesByTo
@@ -340,6 +350,7 @@ export interface FileRouteTypes {
     | '/tax'
     | '/watchlist'
     | '/api/forecast'
+    | '/api/public/data-refresh-eod'
     | '/api/public/sync-etfs'
     | '/api/public/sync-quotes'
   id:
@@ -371,6 +382,7 @@ export interface FileRouteTypes {
     | '/tax'
     | '/watchlist'
     | '/api/forecast'
+    | '/api/public/data-refresh-eod'
     | '/api/public/sync-etfs'
     | '/api/public/sync-quotes'
   fileRoutesById: FileRoutesById
@@ -403,6 +415,7 @@ export interface RootRouteChildren {
   TaxRoute: typeof TaxRoute
   WatchlistRoute: typeof WatchlistRoute
   ApiForecastRoute: typeof ApiForecastRoute
+  ApiPublicDataRefreshEodRoute: typeof ApiPublicDataRefreshEodRoute
   ApiPublicSyncEtfsRoute: typeof ApiPublicSyncEtfsRoute
   ApiPublicSyncQuotesRoute: typeof ApiPublicSyncQuotesRoute
 }
@@ -612,6 +625,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicSyncEtfsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/data-refresh-eod': {
+      id: '/api/public/data-refresh-eod'
+      path: '/api/public/data-refresh-eod'
+      fullPath: '/api/public/data-refresh-eod'
+      preLoaderRoute: typeof ApiPublicDataRefreshEodRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -643,6 +663,7 @@ const rootRouteChildren: RootRouteChildren = {
   TaxRoute: TaxRoute,
   WatchlistRoute: WatchlistRoute,
   ApiForecastRoute: ApiForecastRoute,
+  ApiPublicDataRefreshEodRoute: ApiPublicDataRefreshEodRoute,
   ApiPublicSyncEtfsRoute: ApiPublicSyncEtfsRoute,
   ApiPublicSyncQuotesRoute: ApiPublicSyncQuotesRoute,
 }
