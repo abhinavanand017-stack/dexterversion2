@@ -61,7 +61,7 @@ interface UniverseRow {
   isin: string | null;
   company_name: string;
   nse_industry: string | null;
-  sector: string;
+  sector: string | null;
   index_membership: string[];
   source_tier: number;
   as_of: string;
