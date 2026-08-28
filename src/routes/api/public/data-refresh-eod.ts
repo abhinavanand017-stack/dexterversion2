@@ -61,7 +61,7 @@ interface UniverseRow {
   isin: string | null;
   company_name: string;
   nse_industry: string | null;
-  sector: string;
+  sector: string | null;
   index_membership: string[];
   source_tier: number;
   as_of: string;
@@ -114,6 +114,54 @@ async function ingestUniverse() {
     } catch (e) {
       fileStatus[f.membership] = (e as Error).message;
     }
+  }
+
+  // NSE's index files top out at the 750 Total Market names (Microcap 250 is a
+  // subset of it). To carry the universe past 1,000 names we add the official
+  // EQUITY_L listing for every EQ-series stock. That file carries no industry
+  // column, so those rows keep sector NULL rather than a guessed bucket.
+  try {
+    const res = await fetch("https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv", {
+      headers: { "User-Agent": UA, Accept: "text/csv,*/*" },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) fileStatus["NSE EQUITY LIST"] = `HTTP ${res.status}`;
+    else {
+      const rowsCsv = parseCsv(await res.text());
+      const header = rowsCsv[0].map((h) => h.trim().toUpperCase());
+      const ci = {
+        symbol: header.indexOf("SYMBOL"),
+        name: header.indexOf("NAME OF COMPANY"),
+        series: header.indexOf("SERIES"),
+        isin: header.indexOf("ISIN NUMBER"),
+      };
+      let n = 0;
+      for (const r of rowsCsv.slice(1)) {
+        if ((r[ci.series] ?? "").trim().toUpperCase() !== "EQ") continue;
+        const ticker = (r[ci.symbol] ?? "").trim().toUpperCase();
+        if (!ticker) continue;
+        const existing = byTicker.get(ticker);
+        if (existing) {
+          if (!existing.index_membership.includes("NSE EQUITY LIST")) existing.index_membership.push("NSE EQUITY LIST");
+          continue;
+        }
+        byTicker.set(ticker, {
+          ticker,
+          exchange: "NSE",
+          isin: (r[ci.isin] ?? "").trim() || null,
+          company_name: (r[ci.name] ?? "").trim() || ticker,
+          nse_industry: null,
+          sector: null,
+          index_membership: ["NSE EQUITY LIST"],
+          source_tier: 2,
+          as_of: asOf,
+        });
+        n++;
+      }
+      fileStatus["NSE EQUITY LIST"] = `ok (${n} new)`;
+    }
+  } catch (e) {
+    fileStatus["NSE EQUITY LIST"] = (e as Error).message;
   }
 
   const rows = [...byTicker.values()];
