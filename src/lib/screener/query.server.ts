@@ -68,6 +68,7 @@ export interface CoverageStats {
   lastPriceRefresh: string | null;
   sectors: string[];
   indexes: string[];
+  indexCounts: Record<string, number>;
 }
 
 function client() {
@@ -136,14 +137,18 @@ export async function runCoverage(): Promise<CoverageStats> {
     sb.from("stock_screener_rows").select("ticker", { count: "exact", head: true }).not("close", "is", null),
     sb.from("stock_screener_rows").select("ticker", { count: "exact", head: true }).not("rsi14", "is", null),
     sb.from("stock_prices_eod").select("as_of").order("as_of", { ascending: false }).limit(1),
-    sb.from("stock_universe").select("sector, index_membership"),
+    sb.from("stock_universe").select("sector, index_membership").limit(10000),
   ]);
 
   const sectors = new Set<string>();
   const indexes = new Set<string>();
+  const indexCounts: Record<string, number> = {};
   for (const r of (meta.data ?? []) as { sector: string | null; index_membership: string[] }[]) {
     if (r.sector) sectors.add(r.sector);
-    for (const i of r.index_membership ?? []) indexes.add(i);
+    for (const i of r.index_membership ?? []) {
+      indexes.add(i);
+      indexCounts[i] = (indexCounts[i] ?? 0) + 1;
+    }
   }
 
   return {
@@ -153,5 +158,6 @@ export async function runCoverage(): Promise<CoverageStats> {
     lastPriceRefresh: (latest.data?.[0] as { as_of?: string } | undefined)?.as_of ?? null,
     sectors: [...sectors].sort(),
     indexes: [...indexes].sort(),
+    indexCounts,
   };
 }
