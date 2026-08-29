@@ -137,7 +137,7 @@ export async function runCoverage(): Promise<CoverageStats> {
     sb.from("stock_screener_rows").select("ticker", { count: "exact", head: true }).not("close", "is", null),
     sb.from("stock_screener_rows").select("ticker", { count: "exact", head: true }).not("rsi14", "is", null),
     sb.from("stock_prices_eod").select("as_of").order("as_of", { ascending: false }).limit(1),
-    sb.from("stock_universe").select("sector, index_membership"),
+    sb.from("stock_universe").select("sector, index_membership").limit(10000),
   ]);
 
   const sectors = new Set<string>();
