@@ -68,6 +68,7 @@ export interface CoverageStats {
   lastPriceRefresh: string | null;
   sectors: string[];
   indexes: string[];
+  indexCounts: Record<string, number>;
 }
 
 function client() {
@@ -141,9 +142,13 @@ export async function runCoverage(): Promise<CoverageStats> {
 
   const sectors = new Set<string>();
   const indexes = new Set<string>();
+  const indexCounts: Record<string, number> = {};
   for (const r of (meta.data ?? []) as { sector: string | null; index_membership: string[] }[]) {
     if (r.sector) sectors.add(r.sector);
-    for (const i of r.index_membership ?? []) indexes.add(i);
+    for (const i of r.index_membership ?? []) {
+      indexes.add(i);
+      indexCounts[i] = (indexCounts[i] ?? 0) + 1;
+    }
   }
 
   return {
@@ -153,5 +158,6 @@ export async function runCoverage(): Promise<CoverageStats> {
     lastPriceRefresh: (latest.data?.[0] as { as_of?: string } | undefined)?.as_of ?? null,
     sectors: [...sectors].sort(),
     indexes: [...indexes].sort(),
+    indexCounts,
   };
 }
