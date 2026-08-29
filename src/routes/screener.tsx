@@ -6,7 +6,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { screenerQuery, screenerCoverage } from "@/lib/screener/query.functions";
 import type { ScreenerRow, ScreenerFilters, SortKey } from "@/lib/screener/query.server";
 import { useWatchlist } from "@/components/WatchlistDrawer";
-import { X, Download, Star, Filter, Sparkles, Database, RefreshCw, Search, Check, ChevronsUpDown } from "lucide-react";
+import { X, Download, Star, Filter, Sparkles, Database, RefreshCw, Search, Check as CheckIcon, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -149,7 +149,7 @@ function IndexCombobox({ value, onChange, cov }: { value: string | null; onChang
                     >
                       <span className="flex-1 truncate">{o.label}</span>
                       {c != null && <span className="text-[10px] text-muted-foreground shrink-0">{c.toLocaleString("en-IN")} stocks</span>}
-                      {sel && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                      {sel && <CheckIcon className="h-3.5 w-3.5 text-primary shrink-0" />}
                     </CommandItem>
                   );
                 })}
