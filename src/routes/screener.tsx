@@ -6,8 +6,10 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { screenerQuery, screenerCoverage } from "@/lib/screener/query.functions";
 import type { ScreenerRow, ScreenerFilters, SortKey } from "@/lib/screener/query.server";
 import { useWatchlist } from "@/components/WatchlistDrawer";
-import { X, Download, Star, Filter, Sparkles, Database, RefreshCw, Search } from "lucide-react";
+import { X, Download, Star, Filter, Sparkles, Database, RefreshCw, Search, Check, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 
 const searchSchema = z.object({ q: fallback(z.string(), "").default("") });
 
@@ -43,6 +45,122 @@ const DEFAULT_FILTERS: ScreenerFilters = {
 };
 
 const PENDING = <span className="text-muted-foreground/50 text-[10px]">Data pending</span>;
+
+// Grouped index universe — values must match stock_universe.index_membership strings.
+// No sectoral indices here: sector filtering lives in the chip row below.
+const INDEX_GROUPS: { label: string; options: { value: string; label: string }[] }[] = [
+  {
+    label: "Broad market",
+    options: [
+      { value: "", label: "All 1,000" },
+      { value: "NSE EQUITY LIST", label: "NSE equity list" },
+      { value: "NIFTY TOTAL MARKET", label: "NIFTY Total Market" },
+    ],
+  },
+  {
+    label: "Large cap",
+    options: [
+      { value: "NIFTY 50", label: "NIFTY 50" },
+      { value: "NIFTY NEXT 50", label: "NIFTY Next 50" },
+      { value: "NIFTY 100", label: "NIFTY 100" },
+      { value: "BSE SENSEX", label: "BSE Sensex" },
+      { value: "BSE 100", label: "BSE 100" },
+    ],
+  },
+  {
+    label: "Large & mid cap",
+    options: [
+      { value: "NIFTY 200", label: "NIFTY 200" },
+      { value: "NIFTY LARGEMIDCAP 250", label: "NIFTY LargeMidcap 250" },
+    ],
+  },
+  {
+    label: "Mid cap",
+    options: [
+      { value: "NIFTY MIDCAP 50", label: "NIFTY Midcap 50" },
+      { value: "NIFTY MIDCAP 100", label: "NIFTY Midcap 100" },
+      { value: "NIFTY MIDCAP 150", label: "NIFTY Midcap 150" },
+      { value: "BSE MIDCAP", label: "BSE Midcap" },
+    ],
+  },
+  {
+    label: "Small cap",
+    options: [
+      { value: "NIFTY SMALLCAP 50", label: "NIFTY Smallcap 50" },
+      { value: "NIFTY SMALLCAP 100", label: "NIFTY Smallcap 100" },
+      { value: "NIFTY SMALLCAP 250", label: "NIFTY Smallcap 250" },
+      { value: "BSE SMALLCAP", label: "BSE Smallcap" },
+    ],
+  },
+  { label: "Micro cap", options: [{ value: "NIFTY MICROCAP 250", label: "NIFTY Microcap 250" }] },
+  {
+    label: "Composite",
+    options: [
+      { value: "NIFTY 500", label: "NIFTY 500" },
+      { value: "BSE 500", label: "BSE 500" },
+      { value: "BSE 1000", label: "BSE 1000" },
+    ],
+  },
+];
+
+interface CoverageLike {
+  universe: number;
+  indexCounts?: Record<string, number>;
+}
+
+function IndexCombobox({ value, onChange, cov }: { value: string | null; onChange: (v: string | null) => void; cov: CoverageLike | null }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const q = query.trim().toLowerCase();
+  const groups = INDEX_GROUPS
+    .map((g) => ({ ...g, options: g.options.filter((o) => !q || o.label.toLowerCase().includes(q)) }))
+    .filter((g) => g.options.length > 0);
+
+  const countFor = (v: string) => (v === "" ? cov?.universe : cov?.indexCounts?.[v]);
+  const current = INDEX_GROUPS.flatMap((g) => g.options).find((o) => o.value === (value ?? ""));
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="w-full mt-1 px-2 py-1.5 rounded bg-muted/40 border border-border text-xs font-mono outline-none focus:border-primary hover:bg-muted/60 transition flex items-center justify-between gap-2">
+          <span className="truncate text-foreground">{current?.label ?? "All 1,000"}</span>
+          <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-[--radix-popover-trigger-width] min-w-[260px]" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput value={query} onValueChange={setQuery} placeholder="Search index…" />
+          <CommandList className="max-h-[50vh]">
+            {groups.length === 0 && (
+              <div className="py-6 text-center text-xs text-muted-foreground">No matching index</div>
+            )}
+            {groups.map((g) => (
+              <CommandGroup key={g.label} heading={g.label}>
+                {g.options.map((o) => {
+                  const c = countFor(o.value);
+                  const sel = (value ?? "") === o.value;
+                  return (
+                    <CommandItem
+                      key={o.value || "all"}
+                      value={o.label}
+                      onSelect={() => { onChange(o.value || null); setOpen(false); setQuery(""); }}
+                      className={"gap-2 " + (sel ? "text-primary bg-primary/10" : "")}
+                    >
+                      <span className="flex-1 truncate">{o.label}</span>
+                      {c != null && <span className="text-[10px] text-muted-foreground shrink-0">{c.toLocaleString("en-IN")} stocks</span>}
+                      {sel && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            ))}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 function num(v: number | null | undefined, digits = 2, suffix = "") {
   if (v == null || Number.isNaN(v)) return PENDING;
