@@ -212,7 +212,7 @@ function ScreenerPage() {
   const [selected, setSelected] = useState<ScreenerRow | null>(null);
   const [coverage, setCoverage] = useState<{
     universe: number; withPrice: number; withTechnicals: number;
-    lastPriceRefresh: string | null; sectors: string[]; indexes: string[];
+    lastPriceRefresh: string | null; sectors: string[]; indexes: string[]; indexCounts: Record<string, number>;
   } | null>(null);
 
   // debounce the text box into the live filter set
@@ -364,14 +364,11 @@ function ScreenerPage() {
 
             <div>
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Index</label>
-              <select
-                value={filters.index ?? ""}
-                onChange={(e) => setFilters((f) => ({ ...f, index: e.target.value || null }))}
-                className="w-full mt-1 px-2 py-1.5 rounded bg-muted/40 border border-border text-xs font-mono outline-none focus:border-primary"
-              >
-                <option value="">All listed</option>
-                {(cov?.indexes ?? []).map((i) => <option key={i} value={i}>{i}</option>)}
-              </select>
+              <IndexCombobox
+                value={filters.index ?? null}
+                onChange={(v) => setFilters((f) => ({ ...f, index: v }))}
+                cov={coverage}
+              />
             </div>
 
             <div>
