@@ -333,6 +333,13 @@ export type Database = {
       }
     }
     Views: {
+      stock_index_counts: {
+        Row: {
+          constituent_count: number | null
+          index_name: string | null
+        }
+        Relationships: []
+      }
       stock_screener_rows: {
         Row: {
           beta: number | null
