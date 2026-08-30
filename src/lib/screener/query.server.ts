@@ -132,12 +132,13 @@ export async function runScreenerQuery(input: {
 
 export async function runCoverage(): Promise<CoverageStats> {
   const sb = client();
-  const [{ count: universe }, { count: withPrice }, { count: withTech }, latest, meta] = await Promise.all([
+  const [{ count: universe }, { count: withPrice }, { count: withTech }, latest, meta, idxCounts] = await Promise.all([
     sb.from("stock_universe").select("ticker", { count: "exact", head: true }),
     sb.from("stock_screener_rows").select("ticker", { count: "exact", head: true }).not("close", "is", null),
     sb.from("stock_screener_rows").select("ticker", { count: "exact", head: true }).not("rsi14", "is", null),
     sb.from("stock_prices_eod").select("as_of").order("as_of", { ascending: false }).limit(1),
     sb.from("stock_universe").select("sector, index_membership").limit(10000),
+    sb.from("stock_index_counts").select("index_name, constituent_count"),
   ]);
 
   const sectors = new Set<string>();
@@ -145,10 +146,11 @@ export async function runCoverage(): Promise<CoverageStats> {
   const indexCounts: Record<string, number> = {};
   for (const r of (meta.data ?? []) as { sector: string | null; index_membership: string[] }[]) {
     if (r.sector) sectors.add(r.sector);
-    for (const i of r.index_membership ?? []) {
-      indexes.add(i);
-      indexCounts[i] = (indexCounts[i] ?? 0) + 1;
-    }
+    for (const i of r.index_membership ?? []) indexes.add(i);
+  }
+  // Exact per-index constituent counts from the DB view (row iteration above is capped).
+  for (const r of (idxCounts.data ?? []) as { index_name: string; constituent_count: number }[]) {
+    indexCounts[r.index_name] = r.constituent_count;
   }
 
   return {
