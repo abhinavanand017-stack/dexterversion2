@@ -132,7 +132,7 @@ export async function runScreenerQuery(input: {
 
 export async function runCoverage(): Promise<CoverageStats> {
   const sb = client();
-  const [{ count: universe }, { count: withPrice }, { count: withTech }, latest, meta] = await Promise.all([
+  const [{ count: universe }, { count: withPrice }, { count: withTech }, latest, meta, idxCounts] = await Promise.all([
     sb.from("stock_universe").select("ticker", { count: "exact", head: true }),
     sb.from("stock_screener_rows").select("ticker", { count: "exact", head: true }).not("close", "is", null),
     sb.from("stock_screener_rows").select("ticker", { count: "exact", head: true }).not("rsi14", "is", null),
