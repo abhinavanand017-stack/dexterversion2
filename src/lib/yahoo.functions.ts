@@ -349,6 +349,45 @@ export const fetchYahooChart = createServerFn({ method: "GET" })
   });
 
 
+// ─── Upcoming corporate events ───────────────────────────────────────────
+export interface YahooEvent {
+  type: "earnings" | "ex-dividend" | "corporate action" | "index rebalance";
+  date: string;
+  title: string;
+}
+
+function yahooDate(value: unknown): string | null {
+  const raw = typeof value === "object" && value !== null && "raw" in value
+    ? (value as { raw?: unknown }).raw
+    : value;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
+  return new Date(raw * 1000).toISOString().slice(0, 10);
+}
+
+export const fetchYahooEvents = createServerFn({ method: "GET" })
+  .inputValidator((input: { symbol: string }) => ({ symbol: String(input.symbol || "").slice(0, 32) }))
+  .handler(async ({ data }): Promise<{ ok: boolean; events: YahooEvent[]; error?: string }> => {
+    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(data.symbol)}?modules=calendarEvents%2CsummaryDetail`;
+    try {
+      const res = await withTimeout(fetch(url, { headers: BROWSER_HEADERS }), 6000);
+      if (!res.ok) return { ok: false, events: [], error: `HTTP ${res.status}` };
+      const json = await res.json() as { quoteSummary?: { result?: Array<{ calendarEvents?: { earnings?: { earningsDate?: unknown[] }; exDividendDate?: unknown }; summaryDetail?: { exDividendDate?: unknown } }> } };
+      const row = json.quoteSummary?.result?.[0];
+      if (!row) return { ok: false, events: [], error: "calendar unavailable" };
+      const events: YahooEvent[] = [];
+      const earnings = row.calendarEvents?.earnings?.earningsDate ?? [];
+      for (const value of earnings) {
+        const date = yahooDate(value);
+        if (date) events.push({ type: "earnings", date, title: `Earnings scheduled for ${date}` });
+      }
+      const exDate = yahooDate(row.calendarEvents?.exDividendDate ?? row.summaryDetail?.exDividendDate);
+      if (exDate) events.push({ type: "ex-dividend", date: exDate, title: `Ex-dividend date ${exDate}` });
+      return { ok: true, events };
+    } catch (error) {
+      return { ok: false, events: [], error: error instanceof Error ? error.message : "calendar unavailable" };
+    }
+  });
+
 // ─── Fundamentals ────────────────────────────────────────────────────────
 export interface YahooFundamentals {
   peTrailing: number | null;
