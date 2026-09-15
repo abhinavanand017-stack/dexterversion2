@@ -45,8 +45,11 @@ export function runEnsemble(args:{ bars:OHLCV[]; technical:EngineResult; horizon
   for(let p=0;p<count;p++){ let value=current; const path=[current]; for(let d=1;d<=days;d++){ value*=Math.exp((mu-.5*sigma*sigma)+sigma*normal(rand)); path.push(value); } paths.push(path); terminals.push(value); }
   const dates=tradingDates(bars.at(-1)?.date ?? new Date().toISOString().slice(0,10),days);
   const statisticalPath:number[]=[]; const rawFan=dates.map((date,i)=>{ const col=paths.map(p=>p[i+1]).sort((a,b)=>a-b); const med=quantile(col,.5); statisticalPath.push(med); return {date,median:med,low68:quantile(col,.16),high68:quantile(col,.84),low95:quantile(col,.025),high95:quantile(col,.975)}; });
-  const valuation=args.valuation; const valuationOk=!!valuation&&valuation.currentMultiple!=null&&valuation.currentMultiple>0&&valuation.sectorMedian!=null&&valuation.sectorMedian>0&&valuation.sampleSize>=5;
-  const valuationTarget=valuationOk&&valuation ? current*(1+clamp((valuation.sectorMedian/valuation.currentMultiple)-1,-.35,.35)*.35) : null;
+  const valuation=args.valuation;
+  const currentMultiple=valuation?.currentMultiple ?? null;
+  const sectorMedian=valuation?.sectorMedian ?? null;
+  const valuationOk=currentMultiple!=null&&currentMultiple>0&&sectorMedian!=null&&sectorMedian>0&&(valuation?.sampleSize ?? 0)>=5;
+  const valuationTarget=valuationOk ? current*(1+clamp((sectorMedian/currentMultiple)-1,-.35,.35)*.35) : null;
   const techPath=technical.forecastPath.map(p=>p.price); const valPath=valuationTarget==null?[]:dates.map((_,i)=>current+(valuationTarget-current)*(i+1)/days);
   const baseLayers:LayerResult[]=[
     {key:"technical",label:"Technical",available:true,target:technical.targetPrice,call:technical.targetPrice>current*1.01?"UP":technical.targetPrice<current*.99?"DOWN":"FLAT",path:techPath,weight:0},
