@@ -4,7 +4,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Search, Loader2, TrendingUp, TrendingDown, X, Star, StarOff, GitCompare, Sparkles, RefreshCw, ChevronDown, ChevronRight, SlidersHorizontal, ShieldCheck, CalendarDays } from "lucide-react";
 import {
   ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
-  LineChart, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ReferenceDot,
+  LineChart, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
 } from "recharts";
 import { fetchYahooChart, fetchYahooEvents, fetchYahooFundamentals, type YahooEvent, type YahooFundamentals } from "@/lib/yahoo.functions";
 import { getNews, type NewsItem } from "@/lib/news.functions";
@@ -15,7 +15,7 @@ import { NIFTY500 } from "@/lib/nifty500";
 import { INDICES_UNIVERSE } from "@/lib/forecast/indices";
 import { ETFS_UNIVERSE } from "@/lib/forecast/etfs";
 import { FUNDS_UNIVERSE } from "@/lib/forecast/funds";
-import { runEnsemble, type EnsembleResult, type LayerKey } from "@/lib/forecast/ensemble";
+import { runEnsemble, type EnsembleResult } from "@/lib/forecast/ensemble";
 import { buildCatalysts, type Catalyst } from "@/lib/forecast/catalysts";
 import { computeRobustness, type Robustness } from "@/lib/forecast/confidence";
 import { allRecords, deriveWeights, logForecast, resolveForecasts, trackStats, type ForecastRecord } from "@/lib/forecast/trackRecord";
@@ -133,7 +133,7 @@ async function loadYahoo(symbol: string, force = false): Promise<{ bars: CachedH
       }
     } catch { /* ignore */ }
   }
-  const r = await fetchYahooChart({ data: { symbol, range: "1y", interval: "1d" } });
+  const r = await fetchYahooChart({ data: { symbol, range: "5y", interval: "1d" } });
   if (!r.ok || !r.bars.length) return fallback ? { bars: fallback.bars, meta: fallback.meta, cached: true, cachedAt: fallback.ts } : null;
   const meta: YahooMeta = { price: r.price, prevClose: r.prevClose, dayHigh: r.dayHigh, dayLow: r.dayLow, dayOpen: r.dayOpen, volume: r.volume, w52High: r.w52High, w52Low: r.w52Low, longName: r.longName, currency: r.currency };
   try { sessionStorage.setItem(key, JSON.stringify({ ts: Date.now(), bars: r.bars, meta } satisfies CachedHist)); } catch { /* ignore */ }
@@ -165,7 +165,7 @@ function SearchAssets({ selected, onSelect, universe = UNIVERSE, placeholder = "
   }, [q, universe]);
 
   const showPopular = !q.trim();
-  const popularAssets = useMemo(() => POPULAR.map((k) => universe.find((a) => a.key === k)!).filter(Boolean), [universe]);
+  const popularAssets = useMemo(() => POPULAR.map((k) => universe.find((a) => a.key === k)).filter((a): a is Asset => Boolean(a)), [universe]);
 
   return (
     <div ref={ref} className="relative">
@@ -513,7 +513,7 @@ function projectFund(a: Asset, years = [1, 3, 5, 10]): FundProjection | null {
   else if (fr.r3 != null) { cagr = Math.pow(1 + fr.r3 / 100, 1 / 3) - 1; src = "3Y CAGR"; }
   else if (fr.r1 != null) { cagr = fr.r1 / 100; src = "1Y return"; }
   if (cagr == null) return null;
-  const values = years.map((y) => nav * Math.pow(1 + cagr!, y));
+  const values = years.map((y) => nav * Math.pow(1 + cagr, y));
   return { years, values, cagr: cagr * 100, source: src };
 }
 
@@ -601,8 +601,8 @@ function ForecastPage() {
         <SlotView slot={primary} horizon={horizon} title={selected?.symbol ?? ""} />
         {compareOn && <SlotView slot={secondary} horizon={horizon} title={selected2?.symbol ?? ""} secondary />}
 
-        {compareOn && primary.result && secondary.result && (
-          <ComparisonBanner a={selected!} ar={primary.result} b={selected2!} br={secondary.result} horizon={horizon} />
+        {compareOn && selected && selected2 && primary.result && secondary.result && (
+          <ComparisonBanner a={selected} ar={primary.result} b={selected2} br={secondary.result} horizon={horizon} />
         )}
 
         <p className="text-xs mt-8 leading-relaxed" style={{ color: MUTED }}>
