@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Loader2, TrendingUp, TrendingDown, X, Star, StarOff, GitCompare, Sparkles, RefreshCw, ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-react";
+import { Search, Loader2, TrendingUp, TrendingDown, X, Star, StarOff, GitCompare, Sparkles, RefreshCw, ChevronDown, ChevronRight, SlidersHorizontal, ShieldCheck, CalendarDays } from "lucide-react";
 import {
   ComposedChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
-  LineChart,
+  LineChart, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ReferenceDot,
 } from "recharts";
-import { fetchYahooChart, fetchYahooFundamentals, type YahooFundamentals } from "@/lib/yahoo.functions";
+import { fetchYahooChart, fetchYahooEvents, fetchYahooFundamentals, type YahooEvent, type YahooFundamentals } from "@/lib/yahoo.functions";
+import { getNews, type NewsItem } from "@/lib/news.functions";
 import { listEtfs } from "@/lib/etf.functions";
 import { generateDexterInsight, generateFundamentalSummary } from "@/lib/forecast/insight.functions";
 import { runShortTermForecast, barsToOHLCV, HORIZON_DAYS, FACTOR_REGISTRY, ALL_FACTOR_KEYS, type Horizon, type EngineResult } from "@/lib/forecast/engine12";
@@ -14,6 +15,10 @@ import { NIFTY500 } from "@/lib/nifty500";
 import { INDICES_UNIVERSE } from "@/lib/forecast/indices";
 import { ETFS_UNIVERSE } from "@/lib/forecast/etfs";
 import { FUNDS_UNIVERSE } from "@/lib/forecast/funds";
+import { runEnsemble, type EnsembleResult, type LayerKey } from "@/lib/forecast/ensemble";
+import { buildCatalysts, type Catalyst } from "@/lib/forecast/catalysts";
+import { computeRobustness, type Robustness } from "@/lib/forecast/confidence";
+import { allRecords, deriveWeights, logForecast, resolveForecasts, trackStats, type ForecastRecord } from "@/lib/forecast/trackRecord";
 
 export const Route = createFileRoute("/forecast")({
   head: () => ({
@@ -115,22 +120,24 @@ function signalColor(sig: string): string {
 interface CachedHist { ts: number; bars: { t: number; o: number; h: number; l: number; c: number; v: number }[]; meta: YahooMeta }
 interface YahooMeta { price?: number; prevClose?: number; dayHigh?: number; dayLow?: number; dayOpen?: number; volume?: number; w52High?: number; w52Low?: number; longName?: string; currency?: string }
 
-async function loadYahoo(symbol: string, force = false): Promise<{ bars: CachedHist["bars"]; meta: YahooMeta; cached: boolean } | null> {
+async function loadYahoo(symbol: string, force = false): Promise<{ bars: CachedHist["bars"]; meta: YahooMeta; cached: boolean; cachedAt: number } | null> {
   const key = LS_HIST(symbol);
+  let fallback: CachedHist | null = null;
   if (!force && typeof sessionStorage !== "undefined") {
     try {
       const raw = sessionStorage.getItem(key);
       if (raw) {
         const c = JSON.parse(raw) as CachedHist;
-        if (Date.now() - c.ts < HIST_TTL_MS) return { bars: c.bars, meta: c.meta, cached: true };
+        fallback = c;
+        if (Date.now() - c.ts < HIST_TTL_MS) return { bars: c.bars, meta: c.meta, cached: true, cachedAt: c.ts };
       }
     } catch { /* ignore */ }
   }
   const r = await fetchYahooChart({ data: { symbol, range: "1y", interval: "1d" } });
-  if (!r.ok || !r.bars.length) return null;
+  if (!r.ok || !r.bars.length) return fallback ? { bars: fallback.bars, meta: fallback.meta, cached: true, cachedAt: fallback.ts } : null;
   const meta: YahooMeta = { price: r.price, prevClose: r.prevClose, dayHigh: r.dayHigh, dayLow: r.dayLow, dayOpen: r.dayOpen, volume: r.volume, w52High: r.w52High, w52Low: r.w52Low, longName: r.longName, currency: r.currency };
   try { sessionStorage.setItem(key, JSON.stringify({ ts: Date.now(), bars: r.bars, meta } satisfies CachedHist)); } catch { /* ignore */ }
-  return { bars: r.bars, meta, cached: false };
+  return { bars: r.bars, meta, cached: false, cachedAt: Date.now() };
 }
 
 // ── Search combobox ──
@@ -293,17 +300,17 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 // ── Main chart ──
-function ForecastChart({ result, currentPrice }: { result: EngineResult; currentPrice: number }) {
+function ForecastChart({ result, ensemble, catalysts, currentPrice }: { result: EngineResult; ensemble: EnsembleResult; catalysts: Catalyst[]; currentPrice: number }) {
   const data = useMemo(() => {
     const hist = result.history90.map((h) => ({
       date: h.date, historical: +h.close.toFixed(2), forecast: null as number | null, upper: null as number | null, lower: null as number | null, volume: h.volume,
     }));
     // seam
     const last = hist[hist.length - 1];
-    const fc = result.forecastPath.map((f, i) => ({
+    const fc = ensemble.fan.map((f, i) => ({
       date: f.date,
       historical: i === 0 ? last?.historical ?? null : null,
-      forecast: f.price, upper: f.upper, lower: f.lower, volume: 0,
+      forecast: f.median, upper: f.high68, lower: f.low68, upper95: f.high95, lower95: f.low95, volume: 0,
     }));
     return [...hist, ...fc];
   }, [result]);
@@ -312,7 +319,7 @@ function ForecastChart({ result, currentPrice }: { result: EngineResult; current
   const yDomain: [number, number] = useMemo(() => {
     let lo = Infinity, hi = -Infinity;
     for (const d of data) {
-      for (const v of [d.historical, d.forecast, d.upper, d.lower]) {
+      for (const v of [d.historical, d.forecast, d.upper, d.lower, "upper95" in d ? d.upper95 : null, "lower95" in d ? d.lower95 : null]) {
         if (typeof v === "number") { if (v < lo) lo = v; if (v > hi) hi = v; }
       }
     }
@@ -330,15 +337,18 @@ function ForecastChart({ result, currentPrice }: { result: EngineResult; current
           <YAxis yAxisId="vol" orientation="right" hide domain={[0, "dataMax"]} />
           <Tooltip content={<ChartTooltip />} />
           <Bar yAxisId="vol" dataKey="volume" fill="rgba(255,255,255,0.06)" />
-          <Area yAxisId="price" dataKey="upper" stroke="none" fill="rgba(55,138,221,0.14)" isAnimationActive={false} />
+          <Area yAxisId="price" dataKey="upper95" stroke="none" fill="rgba(55,138,221,0.10)" isAnimationActive={false} />
+          <Area yAxisId="price" dataKey="lower95" stroke="none" fill={BG} isAnimationActive={false} />
+          <Area yAxisId="price" dataKey="upper" stroke="none" fill="rgba(55,138,221,0.22)" isAnimationActive={false} />
           <Area yAxisId="price" dataKey="lower" stroke="none" fill={BG} isAnimationActive={false} />
           <Line yAxisId="price" dataKey="historical" stroke="#94a3b8" strokeWidth={2} dot={false} isAnimationActive animationDuration={1200} connectNulls={false} />
           <Line yAxisId="price" dataKey="forecast" stroke={GREEN} strokeWidth={2.5} strokeDasharray="6 3" dot={false} isAnimationActive animationDuration={1200} connectNulls={false} />
           <ReferenceLine yAxisId="price" x={todayDate} stroke="rgba(255,255,255,0.3)" label={{ value: "Today", fill: MUTED, fontSize: 11, position: "top" }} />
-          <ReferenceLine yAxisId="price" y={result.targetPrice} stroke={GREEN} strokeDasharray="3 3" strokeOpacity={0.6} label={{ value: `Target ${fmtINR(result.targetPrice)}`, position: "right", fill: GREEN, fontSize: 11 }} />
+          <ReferenceLine yAxisId="price" y={ensemble.target} stroke={GREEN} strokeDasharray="3 3" strokeOpacity={0.6} label={{ value: `Target ${fmtINR(ensemble.target)}`, position: "right", fill: GREEN, fontSize: 11 }} />
           <ReferenceLine yAxisId="price" y={result.supportLevels.s1} stroke={AMBER} strokeDasharray="2 4" strokeOpacity={0.5} label={{ value: `S1 ${fmtINR(result.supportLevels.s1, 0)}`, position: "right", fill: AMBER, fontSize: 10 }} />
           <ReferenceLine yAxisId="price" y={result.resistanceLevels.r1} stroke={RED} strokeDasharray="2 4" strokeOpacity={0.5} label={{ value: `R1 ${fmtINR(result.resistanceLevels.r1, 0)}`, position: "right", fill: RED, fontSize: 10 }} />
           <ReferenceLine yAxisId="price" y={currentPrice} stroke="rgba(255,255,255,0.2)" strokeDasharray="1 2" />
+          {catalysts.map((c) => <ReferenceLine key={c.id} yAxisId="price" x={c.date} stroke={AMBER} strokeDasharray="2 3" label={{ value: c.type, fill: AMBER, fontSize: 9, position: "top" }} />)}
         </ComposedChart>
       </ResponsiveContainer>
     </div>
