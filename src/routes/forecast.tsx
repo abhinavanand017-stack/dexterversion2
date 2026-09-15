@@ -987,9 +987,10 @@ function QuantWorkbench({ slot, asset, result, horizon, currentPrice }: { slot: 
 
   useEffect(() => {
     if (!bars.length || !ensemble.layers.length) return;
-    const resolved = resolveForecasts(asset.symbol, bars);
+    resolveForecasts(asset.symbol, bars);
     logForecast({ ticker: asset.symbol, sector: seed?.sector ?? asset.meta ?? "Unknown", horizon, modelKey: [...slot.appliedKeys].sort().join(","), maturityDate: result.targetDate, startPrice: currentPrice, layers: ensemble.layers.filter((l) => l.available).map((l) => ({ key: l.key, target: l.target, call: l.call })), ensembleTarget: ensemble.target, weightSource: ensemble.weightSource });
-    setRecords([...allRecords(), ...resolved].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i));
+    const next = allRecords();
+    setRecords((current) => JSON.stringify(current) === JSON.stringify(next) ? current : next);
   }, [asset.symbol, asset.meta, bars, currentPrice, ensemble.layers, ensemble.target, ensemble.weightSource, horizon, result.targetDate, seed?.sector, slot.appliedKeys]);
 
   const radar = result.factors.map((f) => ({ factor: f.label.replace(/\s+/g, " "), score: Math.round((f.score + 1) * 50), neutral: 50 }));
