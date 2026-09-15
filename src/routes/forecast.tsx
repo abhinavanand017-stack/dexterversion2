@@ -927,6 +927,110 @@ function FundamentalsPanel({ asset, meta }: { asset: Asset; meta: YahooMeta | nu
   );
 }
 
+type WorkbenchTab = "Forecast" | "Scenarios" | "Catalysts" | "Confidence" | "Track Record";
+
+function median(values: number[]) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
+}
+
+function LayerSparkline({ path, color }: { path: number[]; color: string }) {
+  const data = path.map((value, index) => ({ index, value }));
+  return (
+    <ResponsiveContainer width={92} height={34}>
+      <LineChart data={data}><Line dataKey="value" stroke={color} strokeWidth={1.5} dot={false} isAnimationActive={false} /></LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function QuantWorkbench({ slot, asset, result, horizon, currentPrice }: { slot: SlotState; asset: Asset; result: EngineResult; horizon: Horizon; currentPrice: number }) {
+  const [tab, setTab] = useState<WorkbenchTab>("Forecast");
+  const [records, setRecords] = useState<ForecastRecord[]>([]);
+  const [showBreakdown, setShowBreakdown] = useState(false);
+  const bars = useMemo(() => barsToOHLCV(slot.bars ?? []), [slot.bars]);
+  const seed = useMemo(() => NIFTY500.find((s) => `${s.symbol}.NS` === asset.yahoo || s.symbol === asset.symbol), [asset]);
+  const fundamentals = useQuery({
+    queryKey: ["quant-fundamentals", asset.yahoo],
+    queryFn: async () => asset.yahoo ? (await fetchYahooFundamentals({ data: { symbol: asset.yahoo } })).data : null,
+    enabled: !!asset.yahoo,
+    staleTime: 15 * 60_000,
+  });
+  const events = useQuery({
+    queryKey: ["quant-events", asset.yahoo],
+    queryFn: async (): Promise<YahooEvent[]> => asset.yahoo ? (await fetchYahooEvents({ data: { symbol: asset.yahoo } })).events : [],
+    enabled: !!asset.yahoo,
+    staleTime: 15 * 60_000,
+  });
+  const news = useQuery({
+    queryKey: ["quant-catalyst-news"],
+    queryFn: async (): Promise<NewsItem[]> => { const response = await getNews(); return response.ok ? response.items : []; },
+    staleTime: 5 * 60_000,
+  });
+  const peers = useMemo(() => NIFTY500.filter((s) => s.sector === seed?.sector && s.pe != null).map((s) => s.pe as number), [seed]);
+  const valuation = useMemo(() => ({ currentMultiple: fundamentals.data?.peTrailing ?? seed?.pe ?? null, sectorMedian: peers.length >= 5 ? median(peers) : null, sampleSize: peers.length, label: "P/E" as const }), [fundamentals.data, peers, seed]);
+  const catalysts = useMemo(() => buildCatalysts({ events: events.data ?? [], news: news.data ?? [], symbol: asset.symbol, name: asset.name, endDate: result.targetDate }), [events.data, news.data, asset, result.targetDate]);
+  const learned = useMemo(() => {
+    const own = records.filter((r) => r.ticker === asset.symbol);
+    const sector = records.filter((r) => r.sector === (seed?.sector ?? asset.meta ?? "Unknown"));
+    return deriveWeights(own, sector);
+  }, [records, asset, seed]);
+  const baseEnsemble = useMemo(() => runEnsemble({ bars, technical: result, horizon, valuation, learned }), [bars, result, horizon, valuation, learned]);
+  const measuredCatalysts = catalysts.filter((c) => c.magnitudePct != null && Math.abs(c.magnitudePct) >= 2);
+  const robustness = useMemo(() => computeRobustness(bars, result, baseEnsemble.layers.filter((l) => l.available).length, slot.cachedAt ?? Date.now()), [bars, result, baseEnsemble.layers, slot.cachedAt]);
+  const wideners = useMemo(() => [
+    ...measuredCatalysts.map((c) => ({ date: c.date, factor: 1 + Math.min(.5, Math.abs(c.magnitudePct ?? 0) / 100) })),
+    ...(robustness.regimeShift ? [{ date: result.targetDate, factor: 1.25 }] : []),
+  ], [measuredCatalysts, robustness.regimeShift, result.targetDate]);
+  const ensemble = useMemo(() => runEnsemble({ bars, technical: result, horizon, valuation, learned, catalystWidening: wideners }), [bars, result, horizon, valuation, learned, wideners]);
+  const stats = useMemo(() => trackStats(records.filter((r) => r.ticker === asset.symbol)), [records, asset.symbol]);
+
+  useEffect(() => {
+    if (!bars.length || !ensemble.layers.length) return;
+    const resolved = resolveForecasts(asset.symbol, bars);
+    logForecast({ ticker: asset.symbol, sector: seed?.sector ?? asset.meta ?? "Unknown", horizon, modelKey: [...slot.appliedKeys].sort().join(","), maturityDate: result.targetDate, startPrice: currentPrice, layers: ensemble.layers.filter((l) => l.available).map((l) => ({ key: l.key, target: l.target, call: l.call })), ensembleTarget: ensemble.target, weightSource: ensemble.weightSource });
+    setRecords([...allRecords(), ...resolved].filter((r, i, a) => a.findIndex((x) => x.id === r.id) === i));
+  }, [asset.symbol, asset.meta, bars, currentPrice, ensemble.layers, ensemble.target, ensemble.weightSource, horizon, result.targetDate, seed?.sector, slot.appliedKeys]);
+
+  const radar = result.factors.map((f) => ({ factor: f.label.replace(/\s+/g, " "), score: Math.round((f.score + 1) * 50), neutral: 50 }));
+  const activeCatalyst = measuredCatalysts[0];
+  const tabs: WorkbenchTab[] = ["Forecast", "Scenarios", "Catalysts", "Confidence", "Track Record"];
+
+  return <div className="space-y-3">
+    {slot.cached && slot.cachedAt && <div className="rounded-lg px-3 py-2 text-xs" style={{ border: `1px solid ${AMBER}`, color: AMBER }}>Showing last available data as of {new Date(slot.cachedAt).toLocaleString("en-IN")}.</div>}
+    {activeCatalyst && <div className="rounded-lg px-3 py-2 text-xs" style={{ border: `1px solid ${AMBER}`, color: AMBER }}>Cone widens ahead of {activeCatalyst.type} on {activeCatalyst.date}.</div>}
+    <ForecastChart result={result} ensemble={ensemble} catalysts={catalysts} currentPrice={currentPrice} />
+    <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="Forecast analysis">
+      {tabs.map((name) => <button key={name} onClick={() => setTab(name)} className="shrink-0 rounded-lg px-3 py-2 text-xs" style={{ border: `1px solid ${tab === name ? BLUE : BORDER}`, background: tab === name ? "rgba(55,138,221,0.15)" : "transparent", color: tab === name ? TEXT : MUTED }}>{name}</button>)}
+    </div>
+    {tab === "Forecast" && <div className="space-y-3">
+      <div className="rounded-xl p-4" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+        <div className="flex items-end justify-between gap-3 flex-wrap"><div><div className="text-[10px] uppercase" style={{ color: MUTED }}>Ensemble target</div><div className="font-mono text-2xl" style={{ color: signalColor(ensemble.signal) }}>{fmtINR(ensemble.target)}</div></div><div className="text-right text-xs" style={{ color: MUTED }}>{ensemble.weightSource}<br />{ensemble.paths} statistical paths</div></div>
+        <div className="grid md:grid-cols-3 gap-2 mt-3">{ensemble.layers.map((layer) => <div key={layer.key} className="rounded-lg p-3" style={{ border: `1px solid ${BORDER}` }}><div className="flex justify-between gap-2"><div><div className="text-xs" style={{ color: TEXT }}>{layer.label}</div><div className="font-mono text-sm" style={{ color: layer.available ? BLUE : MUTED }}>{layer.available ? `${(layer.weight * 100).toFixed(1)}% · ${fmtINR(layer.target)}` : "Unavailable"}</div></div>{layer.available ? <LayerSparkline path={layer.path} color={layer.key === "technical" ? GREEN : layer.key === "statistical" ? BLUE : AMBER} /> : null}</div>{layer.reason && <div className="mt-1 text-[10px]" style={{ color: MUTED }}>{layer.reason}</div>}</div>)}</div>
+      </div>
+      <div className="grid lg:grid-cols-2 gap-3">
+        <div className="rounded-xl p-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}><div className="text-[10px] uppercase mb-2" style={{ color: MUTED }}>12-factor radar</div><ResponsiveContainer width="100%" height={280}><RadarChart data={radar}><PolarGrid stroke={BORDER} /><PolarAngleAxis dataKey="factor" tick={{ fill: MUTED, fontSize: 9 }} /><PolarRadiusAxis domain={[0,100]} tick={false} axisLine={false} /><Radar dataKey="score" stroke={BLUE} fill={BLUE} fillOpacity={0.25} /></RadarChart></ResponsiveContainer></div>
+        <div className="space-y-3"><MiniCharts result={result} /><ModelsPanel slot={slot} result={result} /></div>
+      </div>
+      <FactorTable result={result} />
+    </div>}
+    {tab === "Scenarios" && <div className="grid md:grid-cols-3 gap-3">{ensemble.scenarios.map((s) => <div key={s.key} className="rounded-xl p-4" style={{ background: CARD, border: `1px solid ${BORDER}` }}><div className="flex justify-between"><span className="capitalize" style={{ color: TEXT }}>{s.key}</span><span className="font-mono" style={{ color: s.key === "bull" ? GREEN : s.key === "bear" ? RED : BLUE }}>{s.probability}%</span></div><div className="font-mono text-xl mt-2">{fmtINR(s.target)}</div><div className="mt-3 space-y-1">{Object.entries(s.contributions).map(([key,value]) => <div key={key} className="flex justify-between text-xs"><span className="capitalize" style={{ color: MUTED }}>{key}</span><span className="font-mono" style={{ color: value >= 0 ? GREEN : RED }}>{value >= 0 ? "+" : ""}{fmtINR(value)}</span></div>)}</div></div>)}</div>}
+    {tab === "Catalysts" && <div className="space-y-2">{catalysts.length ? catalysts.map((c) => <div key={c.id} className="rounded-xl p-3 flex gap-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}><CalendarDays size={16} color={AMBER} /><div className="min-w-0"><div className="text-sm" style={{ color: TEXT }}>{c.title}</div><div className="text-[11px]" style={{ color: MUTED }}>{c.date} · {c.source} · {c.bias} · {c.magnitudeSource}</div></div></div>) : <div className="rounded-xl p-5 text-sm" style={{ background: CARD, border: `1px solid ${BORDER}`, color: MUTED }}>No explicitly dated, source-linked catalysts were found inside this horizon. No dates or impact estimates have been inferred.</div>}</div>}
+    {tab === "Confidence" && <ConfidencePanel robustness={robustness} open={showBreakdown} onToggle={() => setShowBreakdown((v) => !v)} />}
+    {tab === "Track Record" && <TrackRecordPanel records={stats.resolved} stats={stats.stats} ready={stats.ready} />}
+  </div>;
+}
+
+function ConfidencePanel({ robustness, open, onToggle }: { robustness: Robustness; open: boolean; onToggle: () => void }) {
+  const parts = [["Factor agreement", robustness.agreement], ["Data completeness", robustness.completeness], ["Data freshness", robustness.freshness], ["Regime stability", robustness.stability]] as const;
+  return <div className="rounded-xl p-4" style={{ background: CARD, border: `1px solid ${BORDER}` }}><button onClick={onToggle} className="w-full flex justify-between items-center"><span className="flex items-center gap-2"><ShieldCheck size={17} color={robustness.regimeShift ? AMBER : GREEN} /><span style={{ color: TEXT }}>Robustness score</span></span><span className="font-mono text-2xl" style={{ color: robustness.score >= 70 ? GREEN : AMBER }}>{robustness.score}/100</span></button><div className="text-xs mt-2" style={{ color: MUTED }}>{robustness.message} Current annualized volatility {robustness.currentVol.toFixed(1)}%; prior baseline {robustness.baselineVol.toFixed(1)}%.</div>{open && <div className="grid md:grid-cols-4 gap-2 mt-3">{parts.map(([label,value]) => <div key={label} className="rounded-lg p-3" style={{ border: `1px solid ${BORDER}` }}><div className="text-[10px] uppercase" style={{ color: MUTED }}>{label}</div><div className="font-mono text-lg">{value.toFixed(0)}</div></div>)}</div>}<div className="text-[10px] mt-3" style={{ color: MUTED }}>Formula: 30% factor agreement + 25% data completeness + 20% freshness + 25% volatility-regime stability.</div></div>;
+}
+
+function TrackRecordPanel({ records, stats, ready }: { records: ForecastRecord[]; stats: ReturnType<typeof trackStats>["stats"]; ready: boolean }) {
+  if (!ready) return <div className="rounded-xl p-5" style={{ background: CARD, border: `1px solid ${BORDER}` }}><div style={{ color: TEXT }}>Track record building — check back after your first resolved forecasts</div><div className="text-xs mt-1" style={{ color: MUTED }}>{stats.ensemble.n}/5 resolved forecasts. Equal weights remain active until the minimum sample is reached.</div></div>;
+  return <div className="space-y-3"><div className="grid grid-cols-2 md:grid-cols-4 gap-2">{(["ensemble","technical","statistical","valuation"] as const).map((key) => <div key={key} className="rounded-xl p-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}><div className="text-[10px] uppercase" style={{ color: MUTED }}>{key}</div><div className="font-mono text-lg">{stats[key].hitRate?.toFixed(1)}%</div><div className="text-[10px]" style={{ color: MUTED }}>n={stats[key].n}</div></div>)}</div><div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>{records.slice(-8).reverse().map((r) => <div key={r.id} className="grid grid-cols-3 gap-2 px-3 py-2 text-xs" style={{ borderBottom: `1px solid ${BORDER}` }}><span>{r.maturityDate}</span><span className="font-mono">Actual {fmtINR(r.actualPrice)}</span><span style={{ color: r.results?.ensemble?.correct ? GREEN : RED }}>{r.results?.ensemble?.correct ? "Direction correct" : "Direction missed"}</span></div>)}</div></div>;
+}
+
 
 function SlotView({ slot, horizon, title, secondary }: { slot: SlotState; horizon: Horizon; title: string; secondary?: boolean }) {
   const { asset, meta, cached, result, loading, error, refresh, isRefreshing } = slot;
