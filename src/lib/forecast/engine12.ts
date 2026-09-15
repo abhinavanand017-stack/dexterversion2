@@ -11,10 +11,11 @@ export const HORIZON_DAYS: Record<Horizon, number> = {
 // ─── indicators ─────────────────────────────────────────────────────────
 export function sma(a: number[], p: number): number {
   const s = a.slice(-p);
-  return s.reduce((x, y) => x + y, 0) / s.length;
+  return s.length ? s.reduce((x, y) => x + y, 0) / s.length : 0;
 }
 
 export function calcEMA(a: number[], p: number): number[] {
+  if (!a.length) return [];
   const k = 2 / (p + 1);
   let e = a[0];
   return a.map((v) => (e = v * k + e * (1 - k)));
@@ -153,6 +154,7 @@ export const FACTOR_REGISTRY: { key: FactorKey; label: string; weight: number; d
 export const ALL_FACTOR_KEYS: FactorKey[] = FACTOR_REGISTRY.map((f) => f.key);
 
 export function runShortTermForecast(bars: OHLCV[], horizon: Horizon, enabledKeys?: string[]): EngineResult {
+  if (bars.length < 40) throw new Error("At least 40 valid sessions are required");
   const closes = bars.map((b) => b.close);
   const highs = bars.map((b) => b.high);
   const lows = bars.map((b) => b.low);
@@ -172,9 +174,10 @@ export function runShortTermForecast(bars: OHLCV[], horizon: Horizon, enabledKey
   const ma20 = sma(closes, 20);
   const ma50 = sma(closes, 50);
   const ma200 = closes.length >= 200 ? sma(closes, 200) : null;
-  const ema9 = calcEMA(closes, 9).at(-1)!;
-  const ema21 = calcEMA(closes, 21).at(-1)!;
-  const vol20 = vols.slice(-20).reduce((a, b) => a + b, 0) / 20;
+  const ema9 = calcEMA(closes, 9).at(-1) ?? last;
+  const ema21 = calcEMA(closes, 21).at(-1) ?? last;
+  const volumeTail = vols.slice(-20);
+  const vol20 = volumeTail.reduce((a, b) => a + b, 0) / Math.max(1, volumeTail.length);
 
   // pivot points from prior day
   const y = bars[n - 2] ?? bars[n - 1];
@@ -367,7 +370,8 @@ export function runShortTermForecast(bars: OHLCV[], horizon: Horizon, enabledKey
     forecastPath.push({ date: dt.toISOString().slice(0, 10), price: +p.toFixed(2), upper: +upper.toFixed(2), lower: +lower.toFixed(2) });
   }
 
-  const targetPrice = forecastPath[forecastPath.length - 1].price;
+  const finalForecast = forecastPath.at(-1);
+  const targetPrice = finalForecast?.price ?? last;
   const upsidePct = ((targetPrice - last) / last) * 100;
 
   // history & indicator series for mini charts
@@ -387,7 +391,7 @@ export function runShortTermForecast(bars: OHLCV[], horizon: Horizon, enabledKey
   return {
     signal, compositeScore: composite, confidence,
     factors, buyCount, sellCount, holdCount,
-    targetPrice, upsidePct, targetDate: forecastPath[forecastPath.length - 1].date,
+    targetPrice, upsidePct, targetDate: finalForecast?.date ?? bars.at(-1)?.date ?? "",
     bullTarget: +(targetPrice * 1.08).toFixed(2),
     bearTarget: +(targetPrice * 0.93).toFixed(2),
     supportLevels: { s1, s2, pivot },
