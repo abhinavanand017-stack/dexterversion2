@@ -619,6 +619,7 @@ interface SlotState {
   bars: CachedHist["bars"] | null;
   meta: YahooMeta | null;
   cached: boolean;
+  cachedAt: number | null;
   result: EngineResult | null;
   loading: boolean;
   error: string | null;
@@ -675,6 +676,7 @@ function useSlot(asset: Asset | null, horizon: Horizon): SlotState {
     bars: query.data?.bars ?? null,
     meta: query.data?.meta ?? null,
     cached: query.data?.cached ?? false,
+    cachedAt: query.data?.cachedAt ?? null,
     result,
     loading: query.isLoading,
     error: query.error instanceof Error ? query.error.message : null,
@@ -1013,11 +1015,8 @@ function SlotView({ slot, horizon, title, secondary }: { slot: SlotState; horizo
                     <span className="inline-flex items-center gap-1"><span className="w-3 h-2" style={{ background: "rgba(55,138,221,0.3)" }} /> 80% band</span>
                   </div>
                 </div>
-                <ForecastChart result={result} currentPrice={currentPrice} />
+                <QuantWorkbench slot={slot} asset={asset} result={result} horizon={horizon} currentPrice={currentPrice} />
               </div>
-              <MiniCharts result={result} />
-              <FactorTable result={result} />
-              <ModelsPanel slot={slot} result={result} />
             </>
           ) : (
             <FundamentalsPanel asset={asset} meta={meta} />
